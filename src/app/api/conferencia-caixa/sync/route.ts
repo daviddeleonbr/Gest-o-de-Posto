@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   const extratoIdx: Record<string, ExtratoIdx[]> = {}
   for (const t of extratos ?? []) {
     const pid = (t.posto_id as string | null) ??
-      (t.recorrente as { posto_id: string | null } | null)?.posto_id ?? null
+      (t.recorrente as unknown as { posto_id: string | null } | null)?.posto_id ?? null
     if (!pid) continue
     if (!extratoIdx[pid]) extratoIdx[pid] = []
     extratoIdx[pid].push({

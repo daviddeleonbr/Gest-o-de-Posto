@@ -201,8 +201,8 @@ export default function UsuariosPage() {
     const concluidas = tarefas.filter(t => t.status === 'concluida').length
     const canceladas = tarefas.filter(t => t.status === 'cancelada').length
     const recorrentes = recorrentesRes.count ?? 0
-    const postos = (postosRes.data ?? [])
-      .map((r: { posto: { nome: string } | null }) => r.posto?.nome)
+    const postos = (postosRes.data ?? [] as any[])
+      .map((r: any) => r.posto?.nome)
       .filter(Boolean) as string[]
 
     setDetalheStats({ totalTarefas: tarefas.length, abertas, concluidas, canceladas, recorrentes, postos })
@@ -306,7 +306,7 @@ export default function UsuariosPage() {
       (existentes ?? []).map(r => [r.posto_id as string, { id: r.id, ativo: r.ativo }])
     )
 
-    const ops: Promise<unknown>[] = []
+    const ops: Promise<unknown>[] = [] // eslint-disable-line @typescript-eslint/no-explicit-any
 
     for (const posto of postosEmpresa) {
       const existe = existentesMap.get(posto.id)
@@ -314,7 +314,7 @@ export default function UsuariosPage() {
 
       if (marcado && !existe) {
         ops.push(
-          supabase.from('tarefas_recorrentes').insert({
+          (supabase.from('tarefas_recorrentes').insert({
             empresa_id:     selected.empresa_id,
             usuario_id:     selected.id,
             posto_id:       posto.id,
@@ -325,12 +325,12 @@ export default function UsuariosPage() {
             carencia_dias:  4,
             tolerancia_dias: 1,
             ativo:          true,
-          })
+          }) as unknown) as Promise<unknown>
         )
       } else if (marcado && existe && !existe.ativo) {
-        ops.push(supabase.from('tarefas_recorrentes').update({ ativo: true }).eq('id', existe.id))
+        ops.push((supabase.from('tarefas_recorrentes').update({ ativo: true }).eq('id', existe.id) as unknown) as Promise<unknown>)
       } else if (!marcado && existe && existe.ativo) {
-        ops.push(supabase.from('tarefas_recorrentes').update({ ativo: false }).eq('id', existe.id))
+        ops.push((supabase.from('tarefas_recorrentes').update({ ativo: false }).eq('id', existe.id) as unknown) as Promise<unknown>)
       }
     }
 

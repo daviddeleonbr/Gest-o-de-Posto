@@ -37,6 +37,10 @@
   ],
   "exclude": [
     "node_modules",
-    "supabase/functions"
+    "supabase/functions",
+    "sistema-bobinas",
+    "sistema-fechamento",
+    "dashboard",
+    "sync-autosystem"
   ]
 }

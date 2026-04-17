@@ -193,7 +193,7 @@ export default function DashboardPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 {[
                   { label: 'Empresa',     value: data?.empresa_nome ?? usuario?.empresa?.nome ?? '—' },
-                  { label: 'Seu Perfil',  value: usuario?.role ? { master: 'Master', admin: 'Administrador', operador: 'Operador', conciliador: 'Conciliador' }[usuario.role] : '—' },
+                  { label: 'Seu Perfil',  value: usuario?.role ? ({ master: 'Master', admin: 'Administrador', operador: 'Operador', conciliador: 'Conciliador', fechador: 'Fechador', marketing: 'Marketing', gerente: 'Gerente' } as Record<string, string>)[usuario.role] : '—' },
                   { label: 'Status',      value: 'Ativo' },
                   { label: 'Adquirentes', value: String(data?.total_adquirentes ?? 0) },
                 ].map(({ label, value }) => (

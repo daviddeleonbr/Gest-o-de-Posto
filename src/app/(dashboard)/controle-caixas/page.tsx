@@ -169,7 +169,7 @@ export default function ControleCaixasPage() {
     // Conciliadores (múltiplos postos via tarefas_recorrentes)
     for (const r of recorrentesRes.data ?? []) {
       const uid = r.usuario_id as string
-      const uNome = (r.usuario as { nome: string } | null)?.nome ?? ''
+      const uNome = (r.usuario as unknown as { nome: string } | null)?.nome ?? ''
       if (!uMap.has(uid)) uMap.set(uid, { nome: uNome, postoIds: [] })
       uMap.get(uid)!.postoIds.push(r.posto_id as string)
     }

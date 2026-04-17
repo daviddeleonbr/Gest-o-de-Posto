@@ -13,6 +13,7 @@ const STATUS_MAQUININHA: Record<StatusMaquininha, { label: string; variant: 'suc
   estoque:    { label: 'Estoque',     variant: 'secondary' },
   manutencao: { label: 'Manutenção',  variant: 'warning' },
   extraviada: { label: 'Extraviada',  variant: 'secondary' },
+  devolvida:  { label: 'Devolvida',   variant: 'secondary' },
 }
 
 export function StatusEmpresaBadge({ status }: { status: StatusEmpresa }) {

@@ -15,10 +15,11 @@ interface ConfirmDialogProps {
   onConfirm: () => void | Promise<void>
   loading?: boolean
   variant?: 'destructive' | 'default'
+  confirmLabel?: string
 }
 
 export function ConfirmDialog({
-  open, onOpenChange, title, description, onConfirm, loading, variant = 'destructive',
+  open, onOpenChange, title, description, onConfirm, loading, variant = 'destructive', confirmLabel = 'Confirmar',
 }: ConfirmDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -33,7 +34,7 @@ export function ConfirmDialog({
           </Button>
           <Button variant={variant} onClick={onConfirm} disabled={loading}>
             {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-            Confirmar
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

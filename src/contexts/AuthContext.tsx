@@ -49,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select('permissoes')
         .eq('id', perfilId)
         .maybeSingle()
-      setPermissoesEfetivas(data?.permissoes?.length > 0 ? data.permissoes : null)
+      setPermissoesEfetivas((data?.permissoes?.length ?? 0) > 0 ? data!.permissoes : null)
     } else {
       // Verifica override do cargo no DB
       const { data } = await supabase
@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('is_role_override', true)
         .eq('role_override', role)
         .maybeSingle()
-      setPermissoesEfetivas(data?.permissoes?.length > 0 ? data.permissoes : null)
+      setPermissoesEfetivas((data?.permissoes?.length ?? 0) > 0 ? data!.permissoes : null)
     }
   }, [])
 
