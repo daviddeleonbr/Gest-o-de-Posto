@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchMovtos } from '@/lib/supabase/paginate'
 import * as XLSX from 'xlsx'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -148,12 +149,7 @@ export async function POST(req: NextRequest) {
 
   // ── Busca movimentos do período no mirror ──────────────────────────────────
   const todasDatas = diasMovimentos.map(d => d.data)
-  const { data: movtos } = await admin
-    .from('as_movto')
-    .select('conta_debitar, conta_creditar, valor, data')
-    .eq('empresa', empresaId)
-    .in('data', todasDatas)
-    .limit(50000)
+  const movtos = await fetchMovtos(admin, empresaId, todasDatas, true)
 
   // ── Processa cada dia ──────────────────────────────────────────────────────
   const resultados: Array<{

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchMovtos } from '@/lib/supabase/paginate'
 import * as XLSX from 'xlsx'
 
 // ─── Converte valor BR do Excel para número (absoluto) ───────────────────────
@@ -57,12 +58,7 @@ async function calcMovimentoAS(
   datas: string[],
   contaCodigo: string | null,
 ): Promise<number> {
-  const { data: movtos } = await admin
-    .from('as_movto')
-    .select('conta_debitar, conta_creditar, valor')
-    .eq('empresa', empresaId)
-    .in('data', datas)
-    .limit(50000)
+  const movtos = await fetchMovtos(admin, empresaId, datas)
 
   if (contaCodigo) {
     const debito  = (movtos ?? []).filter(m => m.conta_debitar  === contaCodigo).reduce((s, m) => s + (m.valor ?? 0), 0)

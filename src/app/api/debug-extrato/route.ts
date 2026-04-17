@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchMovtos } from '@/lib/supabase/paginate'
 
 // GET /api/debug-extrato?posto_nome=REAL+SUL&data=YYYY-MM-DD
 // OU  /api/debug-extrato?posto_id=XXX&data=YYYY-MM-DD
@@ -44,15 +45,12 @@ export async function GET(req: NextRequest) {
   const contaCodigo = contas?.find((c: any) => c.codigo_conta_externo)?.codigo_conta_externo ?? null
 
   // 3. Busca movtos do dia no mirror
-  const { data: movtos, error: movErr } = await admin
-    .from('as_movto')
-    .select('grid, conta_debitar, conta_creditar, valor, motivo, tipo_doc')
-    .eq('empresa', empresaId)
-    .eq('data', data)
-    .limit(50000)
-
-  if (movErr)
-    return NextResponse.json({ erro: movErr.message })
+  let movtos: any[]
+  try {
+    movtos = await fetchMovtos(admin, empresaId, data)
+  } catch (e: any) {
+    return NextResponse.json({ erro: e.message })
+  }
 
   const totalMovtos      = movtos?.length ?? 0
   const comCreditar      = movtos?.filter((m: any) => m.conta_creditar !== null).length ?? 0

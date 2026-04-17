@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchMovtos } from '@/lib/supabase/paginate'
 
 // POST /api/extrato-verificar
 // Re-consulta o mirror (as_movto) para todas as tarefas com extrato_status = 'ok'
@@ -63,12 +64,7 @@ export async function POST(_req: NextRequest) {
 
     try {
       // Busca movimentos do dia para a empresa
-      const { data: movtos } = await admin
-        .from('as_movto')
-        .select('conta_debitar, conta_creditar, valor')
-        .eq('empresa', empresaId)
-        .eq('data', extratoData)
-        .limit(50000)
+      const movtos = await fetchMovtos(admin, empresaId, extratoData)
 
       if (contaCodigo) {
         // Conta bancária específica
