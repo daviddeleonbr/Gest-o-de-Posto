@@ -49,6 +49,7 @@ export async function GET(req: NextRequest) {
     .select('grid, conta_debitar, conta_creditar, valor, motivo, tipo_doc')
     .eq('empresa', empresaId)
     .eq('data', data)
+    .limit(50000)
 
   if (movErr)
     return NextResponse.json({ erro: movErr.message })

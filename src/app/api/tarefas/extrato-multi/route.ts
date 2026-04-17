@@ -153,6 +153,7 @@ export async function POST(req: NextRequest) {
     .select('conta_debitar, conta_creditar, valor, data')
     .eq('empresa', empresaId)
     .in('data', todasDatas)
+    .limit(50000)
 
   // ── Processa cada dia ──────────────────────────────────────────────────────
   const resultados: Array<{

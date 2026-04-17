@@ -68,6 +68,7 @@ export async function POST(_req: NextRequest) {
         .select('conta_debitar, conta_creditar, valor')
         .eq('empresa', empresaId)
         .eq('data', extratoData)
+        .limit(50000)
 
       if (contaCodigo) {
         // Conta bancária específica

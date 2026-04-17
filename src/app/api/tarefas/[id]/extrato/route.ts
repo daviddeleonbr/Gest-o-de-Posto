@@ -62,6 +62,7 @@ async function calcMovimentoAS(
     .select('conta_debitar, conta_creditar, valor')
     .eq('empresa', empresaId)
     .in('data', datas)
+    .limit(50000)
 
   if (contaCodigo) {
     const debito  = (movtos ?? []).filter(m => m.conta_debitar  === contaCodigo).reduce((s, m) => s + (m.valor ?? 0), 0)
