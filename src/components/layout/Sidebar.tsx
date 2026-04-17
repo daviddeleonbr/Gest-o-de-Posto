@@ -152,14 +152,23 @@ export function Sidebar() {
   const pathname = usePathname()
   const { usuario, signOut, canUser } = useAuthContext()
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const role = usuario?.role as Role | undefined
+
+  // Listen for hamburger toggle event from Header
+  useEffect(() => {
+    const handler = () => setMobileOpen(prev => !prev)
+    window.addEventListener('toggle-sidebar', handler)
+    return () => window.removeEventListener('toggle-sidebar', handler)
+  }, [])
 
   // ── Collapsible groups ──────────────────────────────────────────────────────
   const [openGroups,  setOpenGroups]  = useState<Set<string>>(new Set())
   const [openParents, setOpenParents] = useState<Set<string>>(new Set())
 
-  // Auto-open the group/parent that contains the active route
+  // Auto-open the group/parent that contains the active route + close mobile on navigate
   useEffect(() => {
+    setMobileOpen(false)
     const groups  = new Set<string>()
     const parents = new Set<string>()
     for (const group of NAV_GROUPS) {
@@ -316,12 +325,23 @@ export function Sidebar() {
     ?.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase() ?? 'U'
 
   return (
+    <>
+    {/* Mobile backdrop */}
+    {mobileOpen && (
+      <div
+        className="fixed inset-0 bg-black/50 z-30 md:hidden"
+        onClick={() => setMobileOpen(false)}
+      />
+    )}
     <aside
       className={cn(
-        'relative flex flex-col h-screen sticky top-0 flex-shrink-0 z-20',
+        'flex flex-col h-screen flex-shrink-0 z-40',
+        'fixed top-0 left-0 md:sticky',
         'bg-[hsl(222,44%,8%)] text-[hsl(220,20%,80%)]',
-        'transition-[width] duration-300 ease-in-out',
+        'transition-[width,transform] duration-300 ease-in-out',
         collapsed ? 'w-[64px]' : 'w-[240px]',
+        // Mobile: slide in/out; Desktop: always visible
+        mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
       )}
     >
       {/* Logo */}
@@ -789,5 +809,6 @@ export function Sidebar() {
         }
       </button>
     </aside>
+    </>
   )
 }

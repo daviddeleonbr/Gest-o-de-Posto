@@ -6,7 +6,7 @@ import { useTheme } from '@/contexts/ThemeContext'
 import { ROLE_LABELS, ROLE_COLORS, can } from '@/lib/utils/permissions'
 import { cn } from '@/lib/utils/cn'
 import type { Role } from '@/types/database.types'
-import { Layers, CheckSquare, Sun, Moon } from 'lucide-react'
+import { Layers, CheckSquare, Sun, Moon, Menu } from 'lucide-react'
 
 interface HeaderProps {
   title: string
@@ -28,6 +28,12 @@ export function Header({ title, description, actions }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between h-[60px] px-6 bg-white/95 dark:bg-gray-900/95 backdrop-blur border-b border-gray-200/80 dark:border-gray-800 gap-4">
+      <button
+        className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 -ml-2 mr-1 flex-shrink-0"
+        onClick={() => window.dispatchEvent(new CustomEvent('toggle-sidebar'))}
+      >
+        <Menu className="w-5 h-5" />
+      </button>
       <div className="min-w-0">
         <h1 className="text-[15px] font-semibold text-gray-900 dark:text-gray-100 leading-tight">{title}</h1>
         {description && <p className="text-[12px] text-gray-400 dark:text-gray-500 leading-tight truncate">{description}</p>}
