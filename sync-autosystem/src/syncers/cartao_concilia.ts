@@ -50,14 +50,23 @@ async function syncCartaoPorData(empresas: number[], dataIni: string, dataFim: s
   })
 }
 
-// Sync incremental: últimos 7 dias (conciliações podem ser retroativas)
+// Sync incremental: últimos 7 dias processados dia a dia para evitar timeout
 export async function syncCartaoRecente(empresas: number[]) {
   const tabela = 'as_cartao_concilia_extrato'
   await marcarInicio(tabela)
   try {
-    const n = await syncCartaoPorData(empresas, diasAtras(7), hoje())
-    await marcarOk(tabela, n)
-    if (n > 0) logger.ok(`${tabela} (últimos 7d): ${n} registros`)
+    let total = 0
+    for (let i = 7; i >= 0; i--) {
+      const data = diasAtras(i)
+      try {
+        const n = await syncCartaoPorData(empresas, data, data)
+        total += n
+      } catch (e: any) {
+        logger.error(`${tabela} ${data}: ${e.message}`)
+      }
+    }
+    await marcarOk(tabela, total)
+    if (total > 0) logger.ok(`${tabela} (últimos 7d): ${total} registros`)
   } catch (e: any) {
     await marcarErro(tabela, e.message)
     logger.error(`${tabela}: ${e.message}`)
