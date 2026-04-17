@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'black-translucent',
+    statusBarStyle: 'default',
     title: 'Gestão de Postos',
   },
 }
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Gestão de Postos" />
         <link rel="apple-touch-icon" href="/icon.svg" />
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();(function(){try{var o=new MutationObserver(function(ms){ms.forEach(function(m){if(m.type==='attributes'&&m.target.id==='adr_distai'){m.target.removeAttribute('id');m.target.removeAttribute('hidden');}m.addedNodes.forEach&&m.addedNodes.forEach(function(n){if(n&&n.id==='adr_distai'){n.removeAttribute('id');n.removeAttribute('hidden');}});});});o.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['id','hidden']});setTimeout(function(){o.disconnect();},5000);}catch(e){}})();` }} />
