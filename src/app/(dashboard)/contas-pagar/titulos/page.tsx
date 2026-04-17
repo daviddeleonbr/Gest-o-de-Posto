@@ -96,7 +96,7 @@ export default function TitulosASPage() {
     <div className="flex flex-col h-full">
       <Header
         title="Contas a Pagar — AutoSystem"
-        subtitle="Títulos registrados no AutoSystem"
+        description="Títulos registrados no AutoSystem"
       />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5">

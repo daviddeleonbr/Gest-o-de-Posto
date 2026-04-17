@@ -88,7 +88,7 @@ export default function ConciliacaoPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Conciliação" subtitle="Sistema interno vs AutoSystem" />
+      <Header title="Conciliação" description="Sistema interno vs AutoSystem" />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
 

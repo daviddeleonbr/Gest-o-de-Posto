@@ -60,7 +60,7 @@ export default function ContasPagarPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Contas a Pagar" subtitle={`Resumo — ${mesLabel}`} />
+      <Header title="Contas a Pagar" description={`Resumo — ${mesLabel}`} />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
 

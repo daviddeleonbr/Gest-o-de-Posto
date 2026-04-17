@@ -159,7 +159,7 @@ export default function ConferenciaPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Conferência Diária" subtitle="Títulos a pagar vs valor informado" />
+      <Header title="Conferência Diária" description="Títulos a pagar vs valor informado" />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
 

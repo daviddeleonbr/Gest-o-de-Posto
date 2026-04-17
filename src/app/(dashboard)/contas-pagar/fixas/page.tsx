@@ -482,7 +482,7 @@ export default function FixasPage() {
   // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full">
-      <Header title="Despesas Fixas" subtitle="Controle mensal por posto" />
+      <Header title="Despesas Fixas" description="Controle mensal por posto" />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-5">
 

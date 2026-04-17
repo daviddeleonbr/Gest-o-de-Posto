@@ -128,7 +128,7 @@ export default function MarketingDashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      <Header title="Marketing" subtitle={`Visão geral — ${hoje}`} />
+      <Header title="Marketing" description={`Visão geral — ${hoje}`} />
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
