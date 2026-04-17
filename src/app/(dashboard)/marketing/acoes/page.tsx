@@ -186,7 +186,7 @@ export default function AcoesPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-full">
       <Header title="Ações de Marketing" description="Campanhas e comprovantes por posto" />
 
       <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-5">

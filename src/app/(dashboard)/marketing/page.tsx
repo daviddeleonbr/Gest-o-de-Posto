@@ -127,7 +127,7 @@ export default function MarketingDashboard() {
   const hoje = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-full">
       <Header title="Marketing" description={`Visão geral — ${hoje}`} />
 
       <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-6">

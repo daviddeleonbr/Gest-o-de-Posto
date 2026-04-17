@@ -392,7 +392,7 @@ export default function ContasReceberPage() {
         actions={
           <Button variant="outline" size="sm" disabled={loadingFormas} onClick={loadFormas} className="gap-1.5 text-[13px]">
             <RefreshCw className={cn('w-3.5 h-3.5', loadingFormas && 'animate-spin')} />
-            Atualizar
+            <span className="btn-text">Atualizar</span>
           </Button>
         }
       />

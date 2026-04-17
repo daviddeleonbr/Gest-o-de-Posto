@@ -67,9 +67,18 @@
 
 @layer base {
   * { @apply border-border; }
-  body {
+  html, body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+}
+
+/* Header actions: no mobile mostra só ícone (esconde texto) */
+@media (max-width: 767px) {
+  .header-actions .btn-text {
+    display: none;
   }
 }
 

@@ -216,7 +216,7 @@ export default function PatrocinioPage() {
   const excedeAnual  = saldoSelecionado && (Number(saldoSelecionado.gasto_anual_patrocinio)  + valorNum) > Number(saldoSelecionado.limite_anual)
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-full">
       <Header title="Patrocínios" description="Solicitações e aprovações de patrocínio" />
 
       <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-5">

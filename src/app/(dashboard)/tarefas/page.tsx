@@ -556,7 +556,7 @@ export default function TarefasPage() {
                 className="h-9 text-[13px] gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
               >
                 <Landmark className="w-3.5 h-3.5" />
-                Dia Especial
+                <span className="btn-text">Dia Especial</span>
               </Button>
             )}
             {canCreate && (
@@ -565,7 +565,7 @@ export default function TarefasPage() {
                 className="h-9 bg-orange-500 hover:bg-orange-600 text-[13px] gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Nova Tarefa
+                <span className="btn-text">Nova Tarefa</span>
               </Button>
             )}
           </div>

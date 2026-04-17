@@ -155,7 +155,7 @@ export default function MaquininhasPage() {
           <PermissionGuard permission="maquininhas.create">
             <Button onClick={openCreate} className="h-9 bg-orange-500 hover:bg-orange-600 text-[13px] gap-1.5">
               <Plus className="w-3.5 h-3.5" />
-              Nova Maquininha
+              <span className="btn-text">Nova Maquininha</span>
             </Button>
           </PermissionGuard>
         }

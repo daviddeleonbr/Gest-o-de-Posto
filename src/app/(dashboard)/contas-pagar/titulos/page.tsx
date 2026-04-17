@@ -93,7 +93,7 @@ export default function TitulosASPage() {
   useEffect(() => { load() }, [load])
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-full">
       <Header
         title="Contas a Pagar — AutoSystem"
         description="Títulos registrados no AutoSystem"

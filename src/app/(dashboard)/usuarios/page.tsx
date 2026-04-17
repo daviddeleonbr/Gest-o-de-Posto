@@ -600,7 +600,7 @@ export default function UsuariosPage() {
           <PermissionGuard permission="usuarios.create">
             <Button onClick={openCreate} className="h-9 bg-orange-500 hover:bg-orange-600 text-[13px] gap-1.5">
               <Plus className="w-3.5 h-3.5" />
-              Novo Usuário
+              <span className="btn-text">Novo Usuário</span>
             </Button>
           </PermissionGuard>
         }
