@@ -9,7 +9,7 @@
  * PK: grid (mlid não é único — pode ter duplicatas e NULLs)
  */
 import { withClient } from '../autosystem'
-import { upsertLotes, deletarOrfaos } from '../supabase'
+import { upsertLotes } from '../supabase'
 import { marcarInicio, marcarOk, marcarErro } from '../controle'
 import { logger } from '../logger'
 
@@ -61,11 +61,7 @@ async function syncMovtoPorData(empresas: number[], dataIni: string, dataFim: st
       obs:           row.obs,
     }))
 
-    const gridsValidos = new Set(rows.map(r => r.grid))
-    const upserted = await upsertLotes('as_movto', rows, 'grid')
-    const deletados = await deletarOrfaos(empresas, dataIni, dataFim, gridsValidos)
-    if (deletados > 0) logger.ok(`as_movto: ${deletados} registros deletados (removidos no AUTOSYSTEM)`)
-    return upserted
+    return upsertLotes('as_movto', rows, 'grid')
   })
 }
 
