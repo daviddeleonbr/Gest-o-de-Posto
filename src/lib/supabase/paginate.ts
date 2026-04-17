@@ -38,7 +38,7 @@ export async function fetchMovtos(
     if (error) throw new Error(`fetchMovtos: ${error.message}`)
     if (!rows || rows.length === 0) break
 
-    all.push(...(rows as MovtoRow[]))
+    all.push(...(rows as unknown as MovtoRow[]))
     if (rows.length < pageSize) break
     from += pageSize
   }
