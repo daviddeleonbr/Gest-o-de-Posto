@@ -46,7 +46,7 @@ async function syncCartaoPorData(empresas: number[], dataIni: string, dataFim: s
       autorizadora: row.autorizadora ?? null,
     }))
 
-    return upsertLotes('as_cartao_concilia_extrato', rows, 'empresa,data,produto')
+    return upsertLotes('as_cartao_concilia_extrato', rows, 'empresa,data,produto', 50)
   })
 }
 
