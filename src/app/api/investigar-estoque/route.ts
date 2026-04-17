@@ -4,7 +4,7 @@ import { getPool } from '@/lib/db-externo'
 // GET /api/investigar-estoque
 // Diagnóstico focado nas tabelas de estoque reais do AUTOSYSTEM
 export async function GET() {
-  let client
+  let client: any
   try {
     client = await getPool().connect()
 

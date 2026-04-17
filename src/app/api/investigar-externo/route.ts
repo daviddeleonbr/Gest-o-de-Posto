@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getPool } from '@/lib/db-externo'
 
 export async function GET() {
-  let client
+  let client: any
   try {
     client = await getPool().connect()
 
