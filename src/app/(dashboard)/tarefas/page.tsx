@@ -210,6 +210,13 @@ export default function TarefasPage() {
     postoNome: string; range: string
     resultados: Array<{ data: string; status: string; movimentoExtrato: number; movimentoAS: number; diferenca: number }>
   } | null>(null)
+  // Modal de resultado extrato único
+  const [extratoResultado, setExtratoResultado] = useState<{
+    status: 'ok' | 'divergente'; data: string
+    saldoAnterior: number; saldoDia: number; movimentoExtrato: number
+    entradasAS: number | null; saidasAS: number | null; movimentoExterno: number
+    contaCodigo: string | null; diferenca: number; asAcessivel: boolean
+  } | null>(null)
 
   // Filtros
   const [filterStatus,     setFilterStatus]     = useState<StatusTarefa | 'todos'>('todos')
@@ -367,20 +374,24 @@ export default function TarefasPage() {
     const json = await res.json()
     if (!res.ok) {
       toast({ variant: 'destructive', title: 'Erro ao processar extrato', description: json.error })
-    } else if (json.status === 'ok') {
-      toast({ title: 'Extrato validado! Tarefa concluída automaticamente.', description: `Movimento: R$ ${json.movimentoExtrato.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` })
-      onDone?.()
-      load()
-    } else {
-      toast({
-        variant: 'destructive',
-        title: 'Divergência encontrada',
-        description: `Diferença de R$ ${Math.abs(json.diferenca).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Verifique o extrato.`,
-      })
-      const { data } = await supabase.from('tarefas').select('*, usuario:usuarios(id,nome,email), empresa:empresas(id,nome)').eq('id', tarefaId).single()
-      if (data) { setSelected(data as unknown as Tarefa); onDone?.() }
-      load()
+      return
     }
+    // Mostra modal com resultado detalhado
+    setExtratoResultado({
+      status:          json.status,
+      data:            json.data,
+      saldoAnterior:   json.saldoAnterior,
+      saldoDia:        json.saldoDia,
+      movimentoExtrato: json.movimentoExtrato,
+      entradasAS:      json.entradasAS,
+      saidasAS:        json.saidasAS,
+      movimentoExterno: json.movimentoExterno,
+      contaCodigo:     json.contaCodigo,
+      diferenca:       json.diferenca,
+      asAcessivel:     json.asAcessivel,
+    })
+    onDone?.()
+    load()
   }
 
   async function handleUploadExtrato(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1431,6 +1442,126 @@ export default function TarefasPage() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setMultiResultado(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal resultado extrato único ── */}
+      <Dialog open={!!extratoResultado} onOpenChange={o => { if (!o) setExtratoResultado(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', extratoResultado?.status === 'ok' ? 'bg-green-100' : 'bg-red-100')}>
+                {extratoResultado?.status === 'ok'
+                  ? <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  : <AlertTriangle className="w-4 h-4 text-red-600" />
+                }
+              </div>
+              <div>
+                <DialogTitle>{extratoResultado?.status === 'ok' ? 'Extrato Validado' : 'Divergência Encontrada'}</DialogTitle>
+                {extratoResultado && (
+                  <p className="text-[12px] text-gray-500 mt-0.5">
+                    {new Date(extratoResultado.data + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                  </p>
+                )}
+              </div>
+            </div>
+          </DialogHeader>
+
+          {extratoResultado && (() => {
+            const fmtV = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+            const fmtVS = (v: number) => (v >= 0 ? '+' : '') + v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+            const isOk = extratoResultado.status === 'ok'
+            return (
+              <div className="space-y-3">
+                {/* Extrato Excel */}
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                  <p className="text-[11px] font-semibold text-blue-700 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-3.5 h-3.5" /> Extrato Excel
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white rounded-lg border border-blue-100 p-2">
+                      <p className="text-[10px] text-gray-400 mb-1">Saldo Anterior</p>
+                      <p className="text-[13px] font-mono font-semibold text-gray-700">{fmtV(extratoResultado.saldoAnterior)}</p>
+                    </div>
+                    <div className="bg-white rounded-lg border border-blue-100 p-2">
+                      <p className="text-[10px] text-gray-400 mb-1">Saldo do Dia</p>
+                      <p className="text-[13px] font-mono font-semibold text-gray-700">{fmtV(extratoResultado.saldoDia)}</p>
+                    </div>
+                    <div className="bg-blue-100 rounded-lg border border-blue-200 p-2">
+                      <p className="text-[10px] text-blue-600 mb-1">Movimento</p>
+                      <p className="text-[13px] font-mono font-bold text-blue-800">{fmtVS(extratoResultado.movimentoExtrato)}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* AUTOSYSTEM */}
+                {extratoResultado.asAcessivel ? (
+                  <div className="rounded-xl border border-purple-200 bg-purple-50 p-3">
+                    <p className="text-[11px] font-semibold text-purple-700 uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                      <Landmark className="w-3.5 h-3.5" /> AUTOSYSTEM
+                      {extratoResultado.contaCodigo && (
+                        <span className="font-mono text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded">
+                          Conta {extratoResultado.contaCodigo}
+                        </span>
+                      )}
+                    </p>
+                    {extratoResultado.entradasAS !== null && extratoResultado.saidasAS !== null ? (
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-white rounded-lg border border-purple-100 p-2">
+                          <p className="text-[10px] text-gray-400 mb-1">Entradas</p>
+                          <p className="text-[13px] font-mono font-semibold text-green-700">{fmtV(extratoResultado.entradasAS)}</p>
+                        </div>
+                        <div className="bg-white rounded-lg border border-purple-100 p-2">
+                          <p className="text-[10px] text-gray-400 mb-1">Saídas</p>
+                          <p className="text-[13px] font-mono font-semibold text-red-700">{fmtV(extratoResultado.saidasAS)}</p>
+                        </div>
+                        <div className="bg-purple-100 rounded-lg border border-purple-200 p-2">
+                          <p className="text-[10px] text-purple-600 mb-1">Saldo</p>
+                          <p className="text-[13px] font-mono font-bold text-purple-800">{fmtVS(extratoResultado.movimentoExterno)}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-lg border border-purple-100 p-2 text-center">
+                        <p className="text-[10px] text-gray-400 mb-1">Movimento (sem conta mapeada)</p>
+                        <p className="text-[14px] font-mono font-bold text-purple-800">{fmtVS(extratoResultado.movimentoExterno)}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-center">
+                    <p className="text-[12px] text-gray-400">AUTOSYSTEM inacessível — comparação não realizada</p>
+                  </div>
+                )}
+
+                {/* Resultado */}
+                <div className={cn('rounded-xl border p-3 text-center', isOk ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50')}>
+                  {isOk ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                      <p className="text-[14px] font-bold text-green-800">Valores conferem — Tarefa concluída!</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-red-600" />
+                        <p className="text-[14px] font-bold text-red-800">Divergência de {fmtV(Math.abs(extratoResultado.diferenca))}</p>
+                      </div>
+                      <p className="text-[11px] text-red-500">Verifique o extrato ou os lançamentos no AUTOSYSTEM.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
+          <DialogFooter>
+            <Button
+              className={cn(extratoResultado?.status === 'ok' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700')}
+              onClick={() => setExtratoResultado(null)}
+            >
+              Fechar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

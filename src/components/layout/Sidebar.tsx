@@ -11,7 +11,7 @@ import {
   Archive, Layers, CheckSquare, ScanSearch, ReceiptText, Lock,
   TrendingUp, Wallet, Receipt, Settings, Megaphone, Gift, Database,
   ArrowLeftRight, Plus, Trash2, Eye, EyeOff, X, Check, ChevronDown,
-  PackageSearch,
+  PackageSearch, Truck, CalendarDays, ShoppingCart,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useAuthContext } from '@/contexts/AuthContext'
@@ -105,7 +105,10 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Estoque',
     items: [
-      { href: '/estoque', label: 'Estoque', icon: PackageSearch, permission: 'estoque.view' as Permission },
+      { href: '/estoque',             label: 'Estoque',            icon: PackageSearch, permission: 'estoque.view' as Permission },
+      { href: '/sugestao-pedido',     label: 'Sugestão de Pedido', icon: ShoppingCart,  permission: 'estoque.view' as Permission },
+      { href: '/fornecedores',        label: 'Fornecedores',       icon: Truck,         permission: 'estoque.view' as Permission },
+      { href: '/rotina-fornecedores', label: 'Rotina de Visitas',  icon: CalendarDays,  permission: 'estoque.view' as Permission },
     ],
   },
   {

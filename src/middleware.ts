@@ -25,16 +25,14 @@ export async function middleware(request: NextRequest) {
   )
 
   const { pathname } = request.nextUrl
-  const publicRoutes = ['/login', '/auth/callback']
+  const publicRoutes = ['/login', '/auth/callback', '/api/cron/']
   const isPublic = publicRoutes.some((r) => pathname.startsWith(r))
 
   let user = null
   try {
-    const { data } = await supabase.auth.getUser()
-    user = data.user
+    const { data } = await supabase.auth.getSession()
+    user = data.session?.user ?? null
   } catch {
-    // Se o Supabase não estiver acessível, deixa a requisição passar
-    // O AuthContext no cliente vai tratar a autenticação
     return supabaseResponse
   }
 

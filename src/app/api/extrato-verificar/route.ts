@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { fetchMovtos } from '@/lib/supabase/paginate'
+import { buscarMovtosAutosystem, calcularMovimento } from '@/lib/autosystem'
+
+function gerarDatas(ini: string, fim: string): string[] {
+  const datas: string[] = []
+  const cur = new Date(ini + 'T12:00:00')
+  const end = new Date(fim + 'T12:00:00')
+  while (cur <= end && datas.length < 60) {
+    datas.push(cur.toISOString().slice(0, 10))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return datas
+}
 
 // POST /api/extrato-verificar
-// Re-consulta o mirror (as_movto) para todas as tarefas com extrato_status = 'ok'
-// e marca como 'divergente' se o valor mudou desde a validação original.
+// Re-consulta AUTOSYSTEM para todos os extratos validados (ok ou divergente).
+// Detecta mudanças pós-validação e atualiza extrato_status/diferença no banco.
 export async function POST(_req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -13,138 +24,115 @@ export async function POST(_req: NextRequest) {
 
   const admin = createAdminClient()
 
-  // Busca todas as tarefas com extrato ok ou divergente
+  // 1. Busca todos extratos que foram validados (ok ou divergente)
   const { data: tarefas, error } = await admin
     .from('tarefas')
     .select(`
-      id, titulo, extrato_data, extrato_movimento, extrato_saldo_externo,
-      extrato_diferenca, extrato_status, posto_id, tarefa_recorrente_id,
+      id, extrato_data, extrato_periodo_ini, extrato_movimento, extrato_saldo_externo,
+      extrato_status, titulo,
+      posto_id,
+      recorrente:tarefas_recorrentes(posto_id),
       posto:postos(id, nome, codigo_empresa_externo),
-      recorrente:tarefas_recorrentes(posto_id, posto:postos(id, nome, codigo_empresa_externo))
+      recorrente_posto:tarefas_recorrentes(posto:postos(id, nome, codigo_empresa_externo))
     `)
-    .in('extrato_status', ['ok', 'divergente'])
+    .eq('categoria', 'conciliacao_bancaria')
+    .not('extrato_arquivo_path', 'is', null)
     .not('extrato_data', 'is', null)
-    .not('extrato_movimento', 'is', null)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!tarefas || tarefas.length === 0) return NextResponse.json({ verificadas: 0, divergentes: [] })
+  if (!tarefas?.length) return NextResponse.json({ verificadas: 0, divergentes: [], resolvidos: 0 })
 
-  // Busca mapa de contas bancárias por posto
-  const { data: contas } = await admin
+  // 2. Carrega contas bancárias de todos os postos
+  const { data: contasBancarias } = await admin
     .from('contas_bancarias')
     .select('posto_id, codigo_conta_externo')
     .not('codigo_conta_externo', 'is', null)
 
   const contaMap: Record<string, string> = {}
-  for (const c of contas ?? []) {
-    if (c.posto_id) contaMap[c.posto_id] = c.codigo_conta_externo!
+  for (const c of contasBancarias ?? []) {
+    if (c.posto_id && !contaMap[c.posto_id]) contaMap[c.posto_id] = c.codigo_conta_externo!
   }
 
-  const divergentes: {
+  // 3. Para cada extrato, re-calcula AUTOSYSTEM e compara
+  const divergentes: Array<{
     id: string; titulo: string; postoNome: string; data: string
     movExtrato: number; movAnterior: number; movAtual: number; diferenca: number
-  }[] = []
-  let resolvidos = 0
+  }> = []
+
+  let verificadas = 0
+  let resolvidos  = 0
 
   for (const t of tarefas) {
-    type PostoInfo = { id: string; nome: string; codigo_empresa_externo: string | null }
-    const recorrente = t.recorrente as unknown as { posto_id: string | null; posto: PostoInfo | null } | null
-    const posto = (t.posto as unknown as PostoInfo | null) ?? recorrente?.posto ?? null
-    const postoId = (t.posto_id as string | null) ?? recorrente?.posto_id ?? posto?.id ?? null
-
+    // Resolve posto
+    const posto = (t.posto as any) ?? (t.recorrente_posto as any)?.posto ?? null
     if (!posto?.codigo_empresa_externo) continue
 
-    const empresaId   = parseInt(posto.codigo_empresa_externo)
-    const contaCodigo = postoId ? (contaMap[postoId] ?? null) : null
-    const extratoData = t.extrato_data as string
-    const movExtrato  = t.extrato_movimento as number
-    const movAnterior = t.extrato_saldo_externo as number
+    const postoId = t.posto_id ?? (t.recorrente as any)?.posto_id ?? posto?.id ?? null
+    const empresaId = parseInt(posto.codigo_empresa_externo)
+    if (isNaN(empresaId)) continue
 
-    let movAtual = 0
+    const contaCodigo: string | null = postoId ? (contaMap[postoId] ?? null) : null
+    const dataFim = t.extrato_data as string
+    const dataIni = (t.extrato_periodo_ini as string | null) ?? dataFim
+    const datas   = gerarDatas(dataIni, dataFim)
 
+    let movAtual: number
     try {
-      // Busca movimentos do dia para a empresa
-      const movtos = await fetchMovtos(admin, empresaId, extratoData)
-
+      const movtos = await buscarMovtosAutosystem(empresaId, datas)
       if (contaCodigo) {
-        // Conta bancária específica
-        const debito  = (movtos ?? []).filter(m => m.conta_debitar  === contaCodigo).reduce((s, m) => s + (m.valor ?? 0), 0)
-        const credito = (movtos ?? []).filter(m => m.conta_creditar === contaCodigo).reduce((s, m) => s + (m.valor ?? 0), 0)
-        movAtual = parseFloat((debito - credito).toFixed(2))
+        const entradas = movtos.filter(m => m.conta_debitar  === contaCodigo).reduce((s, m) => s + m.valor, 0)
+        const saidas   = movtos.filter(m => m.conta_creditar === contaCodigo).reduce((s, m) => s + m.valor, 0)
+        movAtual = parseFloat((entradas - saidas).toFixed(2))
       } else {
-        // Fallback: conta 1.2.* excluindo transferências internas entre contas bancárias
-        const debito  = (movtos ?? []).filter(m => m.conta_debitar?.startsWith('1.2.')  && !m.conta_creditar?.startsWith('1.2.')).reduce((s, m) => s + (m.valor ?? 0), 0)
-        const credito = (movtos ?? []).filter(m => m.conta_creditar?.startsWith('1.2.') && !m.conta_debitar?.startsWith('1.2.')).reduce((s, m) => s + (m.valor ?? 0), 0)
-        movAtual = parseFloat((debito - credito).toFixed(2))
+        movAtual = calcularMovimento(movtos, null)
       }
     } catch {
-      continue
+      continue // AUTOSYSTEM inacessível — pula este extrato
     }
 
+    verificadas++
+    const movExtrato  = (t.extrato_movimento as number)
+    const movAnterior = (t.extrato_saldo_externo as number | null) ?? movAtual
     const diferenca   = parseFloat((movExtrato - movAtual).toFixed(2))
-    const estaOk      = Math.abs(diferenca) < 0.02
-    const statusAtual = t.extrato_status as 'ok' | 'divergente'
+    const isOkAgora   = Math.abs(diferenca) < 0.02
 
-    if (statusAtual === 'ok') {
-      const mudou = Math.abs(movAtual - movAnterior) >= 0.02
-      if (mudou) {
-        await admin
-          .from('tarefas')
-          .update({
-            extrato_status:        'divergente',
-            extrato_saldo_externo: movAtual,
-            extrato_diferenca:     diferenca,
-          })
-          .eq('id', t.id)
-
-        divergentes.push({
-          id:        t.id,
-          titulo:    t.titulo,
-          postoNome: posto.nome,
-          data:      extratoData,
-          movExtrato,
-          movAnterior,
-          movAtual,
-          diferenca,
-        })
-      }
+    if (!isOkAgora) {
+      // Extrato continua ou virou divergente
+      divergentes.push({
+        id:         t.id,
+        titulo:     t.titulo ?? '',
+        postoNome:  posto.nome ?? '',
+        data:       dataFim,
+        movExtrato,
+        movAnterior,
+        movAtual,
+        diferenca,
+      })
+      // Atualiza no banco
+      await admin.from('tarefas').update({
+        extrato_saldo_externo: movAtual,
+        extrato_diferenca:     diferenca,
+        extrato_status:        'divergente',
+      }).eq('id', t.id)
     } else {
-      if (estaOk) {
-        await admin
-          .from('tarefas')
-          .update({
-            extrato_status:        'ok',
-            extrato_saldo_externo: movAtual,
-            extrato_diferenca:     0,
-          })
-          .eq('id', t.id)
+      // Está OK agora
+      if ((t.extrato_status as string) === 'divergente') {
+        // Antes era divergente, agora resolveu
         resolvidos++
-      } else {
-        await admin
-          .from('tarefas')
-          .update({
-            extrato_saldo_externo: movAtual,
-            extrato_diferenca:     diferenca,
-          })
-          .eq('id', t.id)
-
-        divergentes.push({
-          id:        t.id,
-          titulo:    t.titulo,
-          postoNome: posto.nome,
-          data:      extratoData,
-          movExtrato,
-          movAnterior,
-          movAtual,
-          diferenca,
-        })
+        await admin.from('tarefas').update({
+          extrato_saldo_externo: movAtual,
+          extrato_diferenca:     0,
+          extrato_status:        'ok',
+        }).eq('id', t.id)
+      } else if (Math.abs(movAtual - movAnterior) > 0.02) {
+        // Valor do AS mudou mas ainda bate com extrato — só atualiza o saldo
+        await admin.from('tarefas').update({
+          extrato_saldo_externo: movAtual,
+          extrato_diferenca:     0,
+        }).eq('id', t.id)
       }
     }
   }
 
-  return NextResponse.json({
-    verificadas: tarefas.length,
-    divergentes,
-    resolvidos,
-  })
+  return NextResponse.json({ verificadas, divergentes, resolvidos })
 }

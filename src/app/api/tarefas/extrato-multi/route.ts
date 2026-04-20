@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { fetchMovtos } from '@/lib/supabase/paginate'
+import { buscarMovtosAutosystem, calcularMovimento } from '@/lib/autosystem'
 import * as XLSX from 'xlsx'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -147,9 +147,12 @@ export async function POST(req: NextRequest) {
     if (t.data_conclusao_prevista) tarefaMap.set(t.data_conclusao_prevista, t)
   }
 
-  // ── Busca movimentos do período no mirror ──────────────────────────────────
+  // ── Busca movimentos do período no AUTOSYSTEM diretamente ─────────────────
   const todasDatas = diasMovimentos.map(d => d.data)
-  const movtos = await fetchMovtos(admin, empresaId, todasDatas, true)
+  let movtos: Awaited<ReturnType<typeof buscarMovtosAutosystem>> = []
+  try {
+    movtos = await buscarMovtosAutosystem(empresaId, todasDatas)
+  } catch { /* AUTOSYSTEM inacessível — movAS ficará 0 */ }
 
   // ── Processa cada dia ──────────────────────────────────────────────────────
   const resultados: Array<{
@@ -158,18 +161,8 @@ export async function POST(req: NextRequest) {
   }> = []
 
   for (const dia of diasMovimentos) {
-    const movtosDia = (movtos ?? []).filter(m => m.data === dia.data)
-
-    let movAS = 0
-    if (contaCodigo) {
-      const debito  = movtosDia.filter(m => m.conta_debitar  === contaCodigo).reduce((s, m) => s + (m.valor ?? 0), 0)
-      const credito = movtosDia.filter(m => m.conta_creditar === contaCodigo).reduce((s, m) => s + (m.valor ?? 0), 0)
-      movAS = parseFloat((debito - credito).toFixed(2))
-    } else {
-      const debito  = movtosDia.filter(m => m.conta_debitar?.startsWith('1.2.')  && !m.conta_creditar?.startsWith('1.2.')).reduce((s, m) => s + (m.valor ?? 0), 0)
-      const credito = movtosDia.filter(m => m.conta_creditar?.startsWith('1.2.') && !m.conta_debitar?.startsWith('1.2.')).reduce((s, m) => s + (m.valor ?? 0), 0)
-      movAS = parseFloat((debito - credito).toFixed(2))
-    }
+    const movtosDia = movtos.filter(m => m.data === dia.data)
+    const movAS = calcularMovimento(movtosDia, contaCodigo)
 
     const diferenca = parseFloat((dia.movimento - movAS).toFixed(2))
     const statusDia = Math.abs(diferenca) < 0.02 ? 'ok' : 'divergente'

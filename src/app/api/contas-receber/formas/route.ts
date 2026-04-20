@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buscarMovtosFormas, buscarMovtosMotivoFormas, buscarPessoas, buscarContas, buscarMotivos } from '@/lib/autosystem'
 
-// GET /api/contas-receber/formas
-// Returns summary grouped by conta_debitar + month.
-// Payment rule: child = 0 → Em Aberto, child <> 0 → Baixado
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -32,9 +30,8 @@ export async function GET(req: NextRequest) {
 
   const venctoIniEfetivo = (!venctoIni || venctoIni < '2026-01-01') ? '2026-01-01' : venctoIni
 
-  // Grupos de contas (inclui motivo:GRID keys)
   const { data: gruposData } = await admin.from('cr_contas_grupo').select('conta_debitar, grupo, conta_nome')
-  const grupoMap: Record<string, string>                        = {}
+  const grupoMap: Record<string, string> = {}
   const motivoGrupos: Record<number, { grupo: string; nome: string }> = {}
   for (const g of gruposData ?? []) {
     grupoMap[g.conta_debitar] = g.grupo
@@ -44,43 +41,29 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // 1. Query as_movto — contas 1.3.%
-  let q = admin
-    .from('as_movto')
-    .select('conta_debitar, empresa, pessoa, vencto, valor, child')
-    .like('conta_debitar', '1.3.%')
-    .in('empresa', empresaIds)
-    .gte('vencto', venctoIniEfetivo)
+  const movtosRaw = await buscarMovtosFormas(empresaIds, { venctoIni: venctoIniEfetivo, venctoFim })
 
-  if (venctoFim) q = q.lte('vencto', venctoFim)
-
-  const { data: movtos, error: errM } = await q
-  if (errM) return NextResponse.json({ error: errM.message }, { status: 500 })
-
-  // 2. Pessoas lookup
-  const pessoaIds = [...new Set((movtos ?? []).map(m => m.pessoa).filter(Boolean))] as number[]
+  const pessoaIds = [...new Set((movtosRaw as any[]).map(m => m.pessoa).filter(Boolean))] as number[]
   const pessoaLookup: Record<number, string> = {}
   if (pessoaIds.length) {
-    const { data: pessoas } = await admin.from('as_pessoa').select('grid, nome').in('grid', pessoaIds)
-    for (const p of pessoas ?? []) pessoaLookup[p.grid] = p.nome ?? '(sem cliente)'
+    const pessoas = await buscarPessoas(pessoaIds)
+    for (const p of pessoas) pessoaLookup[p.grid] = p.nome ?? '(sem cliente)'
   }
 
-  // 3. Contas lookup
-  const { data: contasData } = await admin.from('as_conta').select('codigo, nome').like('codigo', '1.3.%')
+  const contasData = await buscarContas('1.3.%')
   const contaLookup: Record<string, string> = {}
-  for (const c of contasData ?? []) contaLookup[c.codigo] = c.nome ?? ''
+  for (const c of contasData) contaLookup[c.codigo] = c.nome ?? ''
 
-  // 4. Agrega em JS: group by (conta_debitar, empresa, pessoa_nome, mes, pago)
   const agg: Record<string, {
     conta_debitar: string; conta_nome: string | null; empresa: string
     pessoa_nome: string; mes: string; pago: boolean; qtd: number; valor_total: number
   }> = {}
 
-  for (const m of movtos ?? []) {
-    const pessoa_nome  = m.pessoa ? (pessoaLookup[m.pessoa] ?? '(sem cliente)') : '(sem cliente)'
-    const mes          = (m.vencto as string)?.slice(0, 7) ?? ''
-    const pago         = m.child !== null && m.child !== 0
-    const key          = `${m.conta_debitar}|${m.empresa}|${pessoa_nome}|${mes}|${pago}`
+  for (const m of movtosRaw as any[]) {
+    const pessoa_nome = m.pessoa ? (pessoaLookup[m.pessoa] ?? '(sem cliente)') : '(sem cliente)'
+    const mes         = (m.vencto as string)?.slice(0, 7) ?? ''
+    const pago        = m.child !== null && m.child !== 0
+    const key         = `${m.conta_debitar}|${m.empresa}|${pessoa_nome}|${mes}|${pago}`
     if (!agg[key]) agg[key] = {
       conta_debitar: m.conta_debitar ?? '',
       conta_nome:    contaLookup[m.conta_debitar ?? ''] ?? null,
@@ -101,29 +84,17 @@ export async function GET(req: NextRequest) {
     grupo:      grupoMap[r.conta_debitar] ?? null,
   }))
 
-  // 5. Motivo-based movements (SANGRIA, BRINKS, COFRE etc.)
   const motivoGrids = Object.keys(motivoGrupos).map(Number)
   let motivoRows: typeof rows = []
 
   if (motivoGrids.length > 0) {
-    let qm = admin
-      .from('as_movto')
-      .select('motivo, empresa, data, child, valor')
-      .in('empresa', empresaIds)
-      .in('motivo', motivoGrids)
-      .gte('data', venctoIniEfetivo)
-
-    if (venctoFim) qm = qm.lte('data', venctoFim)
-
-    const { data: motivoMovtos } = await qm
-
-    // Motivo names lookup
-    const { data: motivoNomes } = await admin.from('as_motivo_movto').select('grid, nome').in('grid', motivoGrids)
+    const motivoMovtos = await buscarMovtosMotivoFormas(empresaIds, motivoGrids, { dataIni: venctoIniEfetivo, dataFim: venctoFim })
+    const motivoNomes = await buscarMotivos(motivoGrids)
     const motivoNomeLookup: Record<number, string> = {}
-    for (const mn of motivoNomes ?? []) motivoNomeLookup[mn.grid] = mn.nome ?? ''
+    for (const mn of motivoNomes) motivoNomeLookup[mn.grid] = mn.nome ?? ''
 
     const aggM: Record<string, { motivo: number; empresa: string; mes: string; pago: boolean; qtd: number; valor_total: number }> = {}
-    for (const m of motivoMovtos ?? []) {
+    for (const m of motivoMovtos as any[]) {
       const mes  = (m.data as string)?.slice(0, 7) ?? ''
       const pago = m.child !== null && m.child !== 0
       const key  = `${m.motivo}|${m.empresa}|${mes}|${pago}`

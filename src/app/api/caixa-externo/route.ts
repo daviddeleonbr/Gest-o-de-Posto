@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/admin'
+import { buscarEmpresas, buscarCaixas } from '@/lib/autosystem'
 
 export interface CaixaExternoRow {
   grid: string
@@ -10,34 +10,21 @@ export interface CaixaExternoRow {
 
 export async function GET() {
   try {
-    const admin = createAdminClient()
+    const [empresas, caixas] = await Promise.all([
+      buscarEmpresas(),
+      buscarCaixas({ soFechados: true }),
+    ])
 
-    // 1. Todas as empresas
-    const { data: empresas, error: errE } = await admin
-      .from('as_empresa')
-      .select('grid, codigo, nome')
-
-    if (errE) return NextResponse.json({ error: errE.message }, { status: 500 })
-
-    // 2. Último caixa fechado (conferencia IS NOT NULL) por empresa
-    const { data: caixas, error: errC } = await admin
-      .from('as_caixa')
-      .select('empresa, data')
-      .not('conferencia', 'is', null)
-      .order('data', { ascending: false })
-
-    if (errC) return NextResponse.json({ error: errC.message }, { status: 500 })
-
-    // Max data por empresa
     const maxDataByEmpresa: Record<string, string> = {}
-    for (const c of caixas ?? []) {
+    for (const c of caixas) {
       const emp = String(c.empresa)
-      if (!maxDataByEmpresa[emp] || c.data > maxDataByEmpresa[emp]) {
-        maxDataByEmpresa[emp] = c.data
+      const data = c.data as string
+      if (!maxDataByEmpresa[emp] || data > maxDataByEmpresa[emp]) {
+        maxDataByEmpresa[emp] = data
       }
     }
 
-    const rows: CaixaExternoRow[] = (empresas ?? []).map(e => ({
+    const rows: CaixaExternoRow[] = empresas.map(e => ({
       grid:                 String(e.grid),
       codigo:               e.codigo ?? '',
       nome:                 e.nome   ?? '',

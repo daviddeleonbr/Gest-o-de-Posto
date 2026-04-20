@@ -73,6 +73,76 @@ function fmtData(iso: string | null) {
   return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'UTC' })
 }
 
+function TabelaTransacoes({ transacoes, paddingLeft = 'px-8' }: { transacoes: Transacao[]; paddingLeft?: string }) {
+  const abertas  = transacoes.filter(t => !t.pago)
+  const baixadas = transacoes.filter(t => t.pago)
+  const hasBoth  = abertas.length > 0 && baixadas.length > 0
+
+  function Rows({ rows, tipo }: { rows: Transacao[]; tipo: 'aberto' | 'baixado' }) {
+    if (!rows.length) return null
+    return (
+      <>
+        <tr className={cn('border-t', tipo === 'aberto' ? 'border-orange-200 bg-orange-50' : 'border-green-200 bg-green-50')}>
+          <td colSpan={7} className={cn(`${paddingLeft} py-1 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5`, tipo === 'aberto' ? 'text-orange-700' : 'text-green-700')}>
+            {tipo === 'aberto' ? <><Clock className="w-3 h-3 inline" /> Em Aberto ({rows.length})</> : <><CheckCircle2 className="w-3 h-3 inline" /> Baixado ({rows.length})</>}
+          </td>
+        </tr>
+        {rows.map((mov, i) => (
+          <tr key={i} className={cn('hover:bg-gray-50/60 transition-colors', tipo === 'aberto' ? 'bg-orange-50/20' : '')}>
+            <td className={`${paddingLeft} py-2 font-mono text-gray-500 text-[12px]`}>{mov.documento ?? '—'}</td>
+            <td className="px-4 py-2 text-gray-500 text-[12px]">{mov.tipo_doc ?? '—'}</td>
+            <td className="px-4 py-2 text-gray-500 whitespace-nowrap text-[12px]">{fmtData(mov.data)}</td>
+            <td className="px-4 py-2 whitespace-nowrap text-[12px]"><span className={cn('font-medium', tipo === 'aberto' ? 'text-orange-600' : 'text-gray-600')}>{fmtData(mov.vencto)}</span></td>
+            <td className="px-4 py-2 text-right font-mono font-medium text-gray-800 whitespace-nowrap text-[12px]">{formatCurrency(mov.valor)}</td>
+            <td className="px-4 py-2 text-center whitespace-nowrap">
+              {mov.pago
+                ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3" />Baixado</span>
+                : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700"><Clock className="w-3 h-3" />Em Aberto</span>
+              }
+            </td>
+            <td className="px-4 py-2 whitespace-nowrap text-gray-500 text-[12px]">{mov.data_baixa ? fmtData(mov.data_baixa) : '—'}</td>
+          </tr>
+        ))}
+      </>
+    )
+  }
+
+  const totalAberto = abertas.reduce((s, t) => s + t.valor, 0)
+  const totalBaixado = baixadas.reduce((s, t) => s + t.valor, 0)
+  const total = totalAberto + totalBaixado
+
+  return (
+    <table className="w-full text-[12px]">
+      <thead>
+        <tr className="bg-gray-50">
+          <th className={`text-left ${paddingLeft} py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide`}>Documento</th>
+          <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Tipo</th>
+          <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Lançamento</th>
+          <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Vencimento</th>
+          <th className="text-right px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Valor</th>
+          <th className="text-center px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Status</th>
+          <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Data Baixa</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-50">
+        <Rows rows={abertas}  tipo="aberto" />
+        <Rows rows={baixadas} tipo="baixado" />
+      </tbody>
+      <tfoot>
+        <tr className="border-t border-gray-200 bg-gray-50">
+          <td colSpan={4} className={`${paddingLeft} py-1.5 text-[11px] font-semibold text-gray-500`}>
+            {hasBoth
+              ? <span className="flex gap-3"><span className="text-orange-600">{formatCurrency(totalAberto)} em aberto</span><span className="text-green-600">{formatCurrency(totalBaixado)} baixado</span></span>
+              : 'Total do mês'}
+          </td>
+          <td className="px-4 py-1.5 text-right font-mono font-bold text-gray-800 whitespace-nowrap">{formatCurrency(total)}</td>
+          <td /><td />
+        </tr>
+      </tfoot>
+    </table>
+  )
+}
+
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 function fmtMes(yyyymm: string) {
@@ -735,44 +805,7 @@ export default function ContasReceberPage() {
                                                           <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Carregando transações...
                                                         </div>
                                                       ) : (
-                                                        <table className="w-full text-[12px]">
-                                                          <thead>
-                                                            <tr className="bg-gray-50">
-                                                              <th className="text-left px-12 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Documento</th>
-                                                              <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Tipo</th>
-                                                              <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Lançamento</th>
-                                                              <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Vencimento</th>
-                                                              <th className="text-right px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Valor</th>
-                                                              <th className="text-center px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Status</th>
-                                                              <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Data Baixa</th>
-                                                            </tr>
-                                                          </thead>
-                                                          <tbody className="divide-y divide-gray-50">
-                                                            {(transacoes ?? []).map((mov, i) => (
-                                                              <tr key={i} className={cn('hover:bg-gray-50/60 transition-colors', !mov.pago && 'bg-orange-50/30')}>
-                                                                <td className="px-12 py-2 font-mono text-gray-500">{mov.documento ?? '—'}</td>
-                                                                <td className="px-4 py-2 text-gray-500">{mov.tipo_doc ?? '—'}</td>
-                                                                <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{fmtData(mov.data)}</td>
-                                                                <td className="px-4 py-2 whitespace-nowrap"><span className={cn('font-medium', !mov.pago ? 'text-orange-600' : 'text-gray-600')}>{fmtData(mov.vencto)}</span></td>
-                                                                <td className="px-4 py-2 text-right font-mono font-medium text-gray-800 whitespace-nowrap">{formatCurrency(mov.valor)}</td>
-                                                                <td className="px-4 py-2 text-center whitespace-nowrap">
-                                                                  {mov.pago
-                                                                    ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3" />Baixado</span>
-                                                                    : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700"><Clock className="w-3 h-3" />Em Aberto</span>
-                                                                  }
-                                                                </td>
-                                                                <td className="px-4 py-2 whitespace-nowrap text-gray-500">{mov.data_baixa ? fmtData(mov.data_baixa) : '—'}</td>
-                                                              </tr>
-                                                            ))}
-                                                          </tbody>
-                                                          <tfoot>
-                                                            <tr className="border-t border-gray-200 bg-gray-50">
-                                                              <td colSpan={4} className="px-12 py-1.5 text-[11px] font-semibold text-gray-500">Total do mês</td>
-                                                              <td className="px-4 py-1.5 text-right font-mono font-bold text-gray-800 whitespace-nowrap">{formatCurrency(mes.totalValor)}</td>
-                                                              <td /><td />
-                                                            </tr>
-                                                          </tfoot>
-                                                        </table>
+                                                        <TabelaTransacoes transacoes={transacoes ?? []} paddingLeft="px-12" />
                                                       )}
                                                     </div>
                                                   )}
@@ -831,44 +864,7 @@ export default function ContasReceberPage() {
                                                 <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Carregando transações...
                                               </div>
                                             ) : (
-                                              <table className="w-full text-[12px]">
-                                                <thead>
-                                                  <tr className="bg-gray-50">
-                                                    <th className="text-left px-8 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Documento</th>
-                                                    <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Tipo</th>
-                                                    <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Lançamento</th>
-                                                    <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Vencimento</th>
-                                                    <th className="text-right px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Valor</th>
-                                                    <th className="text-center px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Status</th>
-                                                    <th className="text-left px-4 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Data Baixa</th>
-                                                  </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-gray-50">
-                                                  {(transacoes ?? []).map((mov, i) => (
-                                                    <tr key={i} className={cn('hover:bg-gray-50/60 transition-colors', !mov.pago && 'bg-orange-50/30')}>
-                                                      <td className="px-8 py-2 font-mono text-gray-500">{mov.documento ?? '—'}</td>
-                                                      <td className="px-4 py-2 text-gray-500">{mov.tipo_doc ?? '—'}</td>
-                                                      <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{fmtData(mov.data)}</td>
-                                                      <td className="px-4 py-2 whitespace-nowrap"><span className={cn('font-medium', !mov.pago ? 'text-orange-600' : 'text-gray-600')}>{fmtData(mov.vencto)}</span></td>
-                                                      <td className="px-4 py-2 text-right font-mono font-medium text-gray-800 whitespace-nowrap">{formatCurrency(mov.valor)}</td>
-                                                      <td className="px-4 py-2 text-center whitespace-nowrap">
-                                                        {mov.pago
-                                                          ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700"><CheckCircle2 className="w-3 h-3" />Baixado</span>
-                                                          : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-orange-100 text-orange-700"><Clock className="w-3 h-3" />Em Aberto</span>
-                                                        }
-                                                      </td>
-                                                      <td className="px-4 py-2 whitespace-nowrap text-gray-500">{mov.data_baixa ? fmtData(mov.data_baixa) : '—'}</td>
-                                                    </tr>
-                                                  ))}
-                                                </tbody>
-                                                <tfoot>
-                                                  <tr className="border-t border-gray-200 bg-gray-50">
-                                                    <td colSpan={4} className="px-8 py-1.5 text-[11px] font-semibold text-gray-500">Total do mês</td>
-                                                    <td className="px-4 py-1.5 text-right font-mono font-bold text-gray-800 whitespace-nowrap">{formatCurrency(mes.totalValor)}</td>
-                                                    <td /><td />
-                                                  </tr>
-                                                </tfoot>
-                                              </table>
+                                              <TabelaTransacoes transacoes={transacoes ?? []} paddingLeft="px-8" />
                                             )}
                                           </div>
                                         )}

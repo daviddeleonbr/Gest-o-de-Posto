@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { buscarTodosMotivos, buscarMovtosPorMotivo } from '@/lib/autosystem'
 
-// GET /api/marketing/conciliacao?data_ini=2026-01-01&data_fim=2026-04-30
-// Cruza movimentações do AutoSystem (motivo "Marketing") com registros internos
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -15,7 +14,6 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
 
-  // Carrega mapeamento posto ↔ empresa_externo
   const { data: postos } = await admin
     .from('postos')
     .select('id, nome, codigo_empresa_externo')
@@ -29,16 +27,15 @@ export async function GET(req: NextRequest) {
   const empresaIds = Object.keys(postoMap).map(Number)
   if (!empresaIds.length) return NextResponse.json({ resultado: [] })
 
-  // Busca motivos marketing/patroc
-  const { data: motivoNomes } = await admin.from('as_motivo_movto').select('grid, nome')
-  const motivoGrids = (motivoNomes ?? [])
-    .filter(m => m.nome?.toLowerCase().includes('marketing') || m.nome?.toLowerCase().includes('patroc'))
-    .map(m => m.grid)
+  const todosMotivos = await buscarTodosMotivos()
+  const motivosFiltrados = todosMotivos.filter(m =>
+    m.nome?.toLowerCase().includes('marketing') || m.nome?.toLowerCase().includes('patroc')
+  )
   const motivoLookup: Record<number, string> = {}
-  for (const m of motivoNomes ?? []) motivoLookup[m.grid] = m.nome ?? ''
+  for (const m of todosMotivos) motivoLookup[m.grid] = m.nome ?? ''
+  const motivoGrids = motivosFiltrados.map(m => m.grid)
 
   if (!motivoGrids.length) {
-    // Nenhum motivo marketing encontrado
     const { data: patrocinios } = await admin
       .from('marketing_patrocinios')
       .select('id, posto_id, valor, data_evento, status, movto_mlid_externo, valor_externo, divergencia, conciliado, postos(nome)')
@@ -59,52 +56,40 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ movimentos_externo: 0, resultado: soSistema })
   }
 
-  // Busca movimentos com motivo marketing no mirror
-  const { data: movtos, error } = await admin
-    .from('as_movto')
-    .select('grid, mlid, empresa, valor, motivo, data, vencto, documento, child')
-    .in('empresa', empresaIds)
-    .in('motivo', motivoGrids)
-    .gte('data', dataIni)
-    .lte('data', dataFim)
-    .order('data', { ascending: false })
+  const movtosRaw = await buscarMovtosPorMotivo(empresaIds, motivoGrids, dataIni, dataFim)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  const movimentos = (movtos ?? []).map(m => ({
-    mlid:      m.mlid,
+  const movimentos = (movtosRaw as any[]).map(m => ({
+    mlid:        m.mlid,
     empresa_cod: String(m.empresa),
-    valor:     m.valor,
-    motivo:    motivoLookup[m.motivo ?? 0] ?? String(m.motivo),
-    data:      m.data,
-    vencto:    m.vencto,
-    documento: m.documento,
-    child:     m.child,
-    baixado:   m.child !== null && m.child !== 0,
-    posto_id:   postoMap[String(m.empresa)]?.id   ?? null,
-    posto_nome: postoMap[String(m.empresa)]?.nome ?? String(m.empresa),
-    tipo: (motivoLookup[m.motivo ?? 0] ?? '').toLowerCase().includes('patroc') ? 'patrocinio' : 'acao',
+    valor:       m.valor,
+    motivo:      motivoLookup[m.motivo ?? 0] ?? String(m.motivo),
+    data:        m.data,
+    vencto:      m.vencto,
+    documento:   m.documento,
+    child:       m.child,
+    baixado:     m.child !== null && m.child !== 0,
+    posto_id:    postoMap[String(m.empresa)]?.id   ?? null,
+    posto_nome:  postoMap[String(m.empresa)]?.nome ?? String(m.empresa),
+    tipo:        (motivoLookup[m.motivo ?? 0] ?? '').toLowerCase().includes('patroc') ? 'patrocinio' : 'acao',
   }))
 
-  // Carrega registros internos aprovados no mesmo período
-  const { data: patrocinios } = await admin
-    .from('marketing_patrocinios')
-    .select('id, posto_id, valor, data_evento, status, movto_mlid_externo, valor_externo, divergencia, conciliado, postos(nome)')
-    .in('status', ['pendente','aprovado'])
-    .gte('data_evento', dataIni)
-    .lte('data_evento', dataFim)
+  const [patrociniosRes, acaoPostosRes] = await Promise.all([
+    admin
+      .from('marketing_patrocinios')
+      .select('id, posto_id, valor, data_evento, status, movto_mlid_externo, valor_externo, divergencia, conciliado, postos(nome)')
+      .in('status', ['pendente','aprovado'])
+      .gte('data_evento', dataIni)
+      .lte('data_evento', dataFim),
+    admin
+      .from('marketing_acao_postos')
+      .select(`id, posto_id, valor, status, movto_mlid_externo, valor_externo, divergencia, conciliado, postos(nome), marketing_acoes(titulo, data_acao, valor_padrao)`)
+      .in('status', ['enviado','aprovado'])
+      .not('marketing_acoes', 'is', null),
+  ])
 
-  const { data: acaoPostos } = await admin
-    .from('marketing_acao_postos')
-    .select(`
-      id, posto_id, valor, status, movto_mlid_externo, valor_externo, divergencia, conciliado,
-      postos(nome),
-      marketing_acoes(titulo, data_acao, valor_padrao)
-    `)
-    .in('status', ['enviado','aprovado'])
-    .not('marketing_acoes', 'is', null)
+  const patrocinios = patrociniosRes.data
+  const acaoPostos  = acaoPostosRes.data
 
-  // Tenta conciliar: mesmo posto + valor ±5% + data ±3 dias
   const resultadoConciliacao = movimentos.map(mov => {
     const candidatos = [
       ...(patrocinios ?? []).filter((p: any) =>
@@ -136,7 +121,6 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  // Registros internos sem correspondência no caixa
   const mlidsEncontrados = new Set(resultadoConciliacao.filter(r => r.interno).map(r => (r as any).interno?.id))
   const soSistema = (patrocinios ?? [])
     .filter((p: any) => !mlidsEncontrados.has(p.id))

@@ -1,39 +1,38 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { buscarTodosMotivos, buscarMovtosPorMotivo } from '@/lib/autosystem'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-// GET /api/marketing/diagnostico
-// Investiga a estrutura da tabela movto e lista valores distintos de motivo
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
   const admin = createAdminClient()
+  const { data: postos } = await admin
+    .from('postos')
+    .select('codigo_empresa_externo')
+    .not('codigo_empresa_externo', 'is', null)
 
-  // Busca motivos marketing/patroc
-  const { data: motivoNomes, error: errMM } = await admin
-    .from('as_motivo_movto')
-    .select('grid, nome')
+  const empresaIds = (postos ?? []).map(p => parseInt(p.codigo_empresa_externo!)).filter(n => !isNaN(n))
 
-  if (errMM) return NextResponse.json({ error: errMM.message }, { status: 500 })
-
-  const motivosFiltrados = (motivoNomes ?? []).filter(m =>
+  const todosMotivos = await buscarTodosMotivos()
+  const motivosFiltrados = todosMotivos.filter(m =>
     m.nome?.toLowerCase().includes('marketing') || m.nome?.toLowerCase().includes('patroc')
   )
 
   if (!motivosFiltrados.length) return NextResponse.json({ motivos: [] })
 
   const motivoGrids = motivosFiltrados.map(m => m.grid)
+  const dataIni = '2020-01-01'
+  const dataFim = new Date().toISOString().slice(0, 10)
 
-  // Conta movimentos e soma valores por motivo
-  const { data: movtos } = await admin
-    .from('as_movto')
-    .select('motivo, valor')
-    .in('motivo', motivoGrids)
+  const movtos = empresaIds.length
+    ? await buscarMovtosPorMotivo(empresaIds, motivoGrids, dataIni, dataFim)
+    : []
 
   const agg: Record<number, { qtd: number; valor: number }> = {}
-  for (const m of movtos ?? []) {
+  for (const m of movtos as any[]) {
     if (!m.motivo) continue
     if (!agg[m.motivo]) agg[m.motivo] = { qtd: 0, valor: 0 }
     agg[m.motivo].qtd   += 1

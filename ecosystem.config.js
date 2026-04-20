@@ -31,5 +31,22 @@ module.exports = {
       error_file: './logs/pm2-error.log',
       out_file: './logs/pm2-out.log',
     },
+    {
+      name: 'cron-extratos',
+      script: './scripts/cron-verificar-extratos.js',
+      cwd: __dirname,
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000,
+        CRON_SECRET: 'cron-interno-gestao',
+        APP_HOST: 'localhost',
+      },
+      log_date_format: 'YYYY-MM-DD HH:mm:ss',
+      error_file: './logs/cron-error.log',
+      out_file: './logs/cron-out.log',
+    },
   ],
 }

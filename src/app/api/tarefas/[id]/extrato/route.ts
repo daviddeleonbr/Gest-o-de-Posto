@@ -1,24 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { fetchMovtos } from '@/lib/supabase/paginate'
+import { buscarMovtosAutosystem, calcularMovimento } from '@/lib/autosystem'
 import * as XLSX from 'xlsx'
 
-// ─── Converte valor BR do Excel para número (absoluto) ───────────────────────
-// "21.365,51 C" → 21365.51  |  "34.276,33 D" → 34276.33
-function parseValorBR(raw: unknown): number {
-  if (raw === null || raw === undefined || raw === '') return 0
-  if (typeof raw === 'number') return Math.abs(raw)
-  const str = String(raw).trim()
-  const semSufixo = str.replace(/\s*[CDcd*]\s*$/, '').trim()
-  const semSinal  = semSufixo.replace(/^-\s*/, '').trim()
-  const norm      = semSinal.replace(/\./g, '').replace(',', '.')
-  const num       = parseFloat(norm)
-  return isNaN(num) ? 0 : num
-}
-
 // ─── Converte valor BR do Excel preservando o sinal ──────────────────────────
-// "21.365,51 C" → +21365.51  |  "747,61 D" ou "-747,61" → -747.61
 function parseValorBRSigned(raw: unknown): number {
   if (raw === null || raw === undefined || raw === '') return 0
   if (typeof raw === 'number') return raw
@@ -38,38 +24,14 @@ function parseDataExcel(raw: unknown): string | null {
   if (!raw) return null
   if (typeof raw === 'number') {
     const d = XLSX.SSF.parse_date_code(raw)
-    if (d) {
-      return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
-    }
+    if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
   }
-  const str   = String(raw).trim()
+  const str    = String(raw).trim()
   const partes = str.split('/')
-  if (partes.length === 3) {
+  if (partes.length === 3)
     return `${partes[2]}-${partes[1].padStart(2, '0')}-${partes[0].padStart(2, '0')}`
-  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str
   return null
-}
-
-// ─── Calcula movimento do AutoSystem mirror ───────────────────────────────────
-async function calcMovimentoAS(
-  admin: ReturnType<typeof createAdminClient>,
-  empresaId: number,
-  datas: string[],
-  contaCodigo: string | null,
-): Promise<number> {
-  const movtos = await fetchMovtos(admin, empresaId, datas)
-
-  if (contaCodigo) {
-    const debito  = (movtos ?? []).filter(m => m.conta_debitar  === contaCodigo).reduce((s, m) => s + (m.valor ?? 0), 0)
-    const credito = (movtos ?? []).filter(m => m.conta_creditar === contaCodigo).reduce((s, m) => s + (m.valor ?? 0), 0)
-    return parseFloat((debito - credito).toFixed(2))
-  } else {
-    // Fallback: conta 1.2.* excluindo transferências internas
-    const debito  = (movtos ?? []).filter(m => m.conta_debitar?.startsWith('1.2.')  && !m.conta_creditar?.startsWith('1.2.')).reduce((s, m) => s + (m.valor ?? 0), 0)
-    const credito = (movtos ?? []).filter(m => m.conta_creditar?.startsWith('1.2.') && !m.conta_debitar?.startsWith('1.2.')).reduce((s, m) => s + (m.valor ?? 0), 0)
-    return parseFloat((debito - credito).toFixed(2))
-  }
 }
 
 // ─── POST /api/tarefas/[id]/extrato ──────────────────────────────────────────
@@ -83,11 +45,12 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
-  // ── Busca tarefa com posto ────────────────────────────────────────────────
+  // ── Busca tarefa com posto e data esperada ────────────────────────────────
   const { data: tarefa } = await supabase
     .from('tarefas')
     .select(`
       id, status, categoria, posto_id, tarefa_recorrente_id,
+      data_conclusao_prevista,
       posto:postos(id, nome, codigo_empresa_externo),
       recorrente:tarefas_recorrentes(posto_id, posto:postos(id, nome, codigo_empresa_externo))
     `)
@@ -95,9 +58,8 @@ export async function POST(
     .single()
 
   if (!tarefa) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 })
-  if (tarefa.categoria !== 'conciliacao_bancaria') {
+  if (tarefa.categoria !== 'conciliacao_bancaria')
     return NextResponse.json({ error: 'Esta tarefa não é de conciliação bancária' }, { status: 400 })
-  }
 
   type PostoInfo = { id: string; nome: string; codigo_empresa_externo: string | null }
   const recorrente = tarefa.recorrente as unknown as { posto_id: string | null; posto: PostoInfo | null } | null
@@ -112,6 +74,9 @@ export async function POST(
     postoResolvido?.id ??
     null
 
+  // Data esperada da tarefa (YYYY-MM-DD)
+  const dataEsperada: string | null = (tarefa.data_conclusao_prevista as string | null)?.slice(0, 10) ?? null
+
   // ── Lê o arquivo Excel ────────────────────────────────────────────────────
   const formData = await req.formData()
   const file = formData.get('file') as File | null
@@ -122,8 +87,9 @@ export async function POST(
   const ws     = wb.Sheets[wb.SheetNames[0]]
   const rows: unknown[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
 
+  // Coleta todos os saldos do dia + saldo anterior inicial do arquivo
   const saldosDia: Array<{ data: string; valor: number }> = []
-  let saldoAnterior: number | null = null
+  let saldoAnteriorArquivo: number | null = null
 
   for (const row of rows) {
     const colC = String(row[2] ?? '').trim().toUpperCase()
@@ -131,12 +97,12 @@ export async function POST(
       const d = parseDataExcel(row[0])
       if (d) saldosDia.push({ data: d, valor: parseValorBRSigned(row[3]) })
     }
-    if (colC === 'SALDO ANTERIOR' && saldoAnterior === null) {
-      saldoAnterior = parseValorBRSigned(row[3])
+    if (colC === 'SALDO ANTERIOR' && saldoAnteriorArquivo === null) {
+      saldoAnteriorArquivo = parseValorBRSigned(row[3])
     }
   }
 
-  if (saldosDia.length === 0 || saldoAnterior === null) {
+  if (saldosDia.length === 0 || saldoAnteriorArquivo === null) {
     return NextResponse.json({
       error: 'Não foram encontradas as linhas "SALDO DO DIA" e "SALDO ANTERIOR". Verifique se o arquivo é o extrato correto.',
     }, { status: 422 })
@@ -144,40 +110,83 @@ export async function POST(
 
   saldosDia.sort((a, b) => a.data.localeCompare(b.data))
 
-  const extratoData      = saldosDia[saldosDia.length - 1].data
-  const saldoDia         = saldosDia[saldosDia.length - 1].valor
+  // ── Valida e localiza a data da tarefa no extrato ─────────────────────────
+  let extratoData: string
+  let saldoDia: number
+  let saldoAnterior: number
+  let datasAS: string[]  // datas para consultar no AUTOSYSTEM
+
+  if (dataEsperada) {
+    const idx = saldosDia.findIndex(s => s.data === dataEsperada)
+
+    if (idx === -1) {
+      const datas = saldosDia.map(s => {
+        const [y, m, d] = s.data.split('-')
+        return `${d}/${m}/${y}`
+      }).join(', ')
+      return NextResponse.json({
+        error: `O extrato não contém a data ${dataEsperada.split('-').reverse().join('/')} (data desta tarefa). Datas encontradas no arquivo: ${datas}. Verifique se está enviando o extrato correto.`,
+      }, { status: 422 })
+    }
+
+    extratoData  = dataEsperada
+    saldoDia     = saldosDia[idx].valor
+    // saldo anterior do dia = saldo do dia anterior (ou saldo anterior do arquivo se for o 1º dia)
+    saldoAnterior = idx > 0 ? saldosDia[idx - 1].valor : saldoAnteriorArquivo
+    datasAS       = [dataEsperada]  // AUTOSYSTEM só para o dia da tarefa
+  } else {
+    // Sem data esperada: usa o último dia do arquivo (fallback)
+    const last    = saldosDia[saldosDia.length - 1]
+    extratoData   = last.data
+    saldoDia      = last.valor
+    saldoAnterior = saldosDia.length > 1 ? saldosDia[saldosDia.length - 2].valor : saldoAnteriorArquivo
+    datasAS       = [extratoData]
+  }
+
   const movimentoExtrato = parseFloat((saldoDia - saldoAnterior).toFixed(2))
 
   // ── Busca conta bancária mapeada ──────────────────────────────────────────
+  const admin = createAdminClient()
   let contaCodigo: string | null = null
   if (postoId) {
-    const admin = createAdminClient()
-    const { data: contasMapeadas } = await admin
+    const { data: contas } = await admin
       .from('contas_bancarias')
-      .select('id, banco, codigo_conta_externo')
+      .select('codigo_conta_externo')
       .eq('posto_id', postoId)
       .not('codigo_conta_externo', 'is', null)
       .limit(1)
-    contaCodigo = (contasMapeadas?.[0] as any)?.codigo_conta_externo ?? null
+    contaCodigo = (contas?.[0] as any)?.codigo_conta_externo ?? null
   }
 
-  let empresaId: number | null = postoResolvido?.codigo_empresa_externo
+  const empresaId = postoResolvido?.codigo_empresa_externo
     ? parseInt(postoResolvido.codigo_empresa_externo)
     : null
 
-  if (!empresaId) {
-    return NextResponse.json({
-      error: `Não foi possível identificar a empresa do posto "${postoResolvido?.nome ?? '(sem posto)'}". Configure o "Código AUTOSYSTEM" na conta bancária do posto ou o "Código Empresa AUTOSYSTEM" no cadastro do posto.`,
-    }, { status: 400 })
+  // ── Consulta AUTOSYSTEM para o dia da tarefa ──────────────────────────────
+  let movimentoExterno = movimentoExtrato // fallback: sem divergência
+  let entradasAS: number | null = null
+  let saidasAS:   number | null = null
+  let asAcessivel = false
+
+  if (empresaId) {
+    try {
+      const movtos = await buscarMovtosAutosystem(empresaId, datasAS)
+
+      if (contaCodigo) {
+        entradasAS = parseFloat(movtos.filter(m => m.conta_debitar  === contaCodigo).reduce((s, m) => s + m.valor, 0).toFixed(2))
+        saidasAS   = parseFloat(movtos.filter(m => m.conta_creditar === contaCodigo).reduce((s, m) => s + m.valor, 0).toFixed(2))
+        movimentoExterno = parseFloat((entradasAS - saidasAS).toFixed(2))
+      } else {
+        movimentoExterno = calcularMovimento(movtos, null)
+      }
+      asAcessivel = true
+    } catch {
+      // AUTOSYSTEM inacessível — aceita extrato sem comparação
+    }
   }
 
-  // ── Consulta mirror (as_movto) ────────────────────────────────────────────
-  const admin = createAdminClient()
-  const datas = saldosDia.map(s => s.data)
-  const movimentoExterno = await calcMovimentoAS(admin, empresaId, datas, contaCodigo)
-
   const diferenca     = parseFloat((movimentoExtrato - movimentoExterno).toFixed(2))
-  const statusExtrato = Math.abs(diferenca) < 0.02 ? 'ok' : 'divergente'
+  const statusExtrato = !asAcessivel || Math.abs(diferenca) < 0.02 ? 'ok' : 'divergente'
 
   // ── Upload do arquivo ─────────────────────────────────────────────────────
   const nomeArquivo = `${id}/${extratoData}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
@@ -209,11 +218,14 @@ export async function POST(
   return NextResponse.json({
     ok:               true,
     data:             extratoData,
-    dias:             datas,
     saldoDia,
     saldoAnterior,
     movimentoExtrato,
     movimentoExterno,
+    entradasAS,
+    saidasAS,
+    contaCodigo,
+    asAcessivel,
     diferenca,
     status:           statusExtrato,
     concluidoAuto:    statusExtrato === 'ok',
