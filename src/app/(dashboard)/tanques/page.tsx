@@ -56,8 +56,9 @@ function today() {
 export default function TanquesPage() {
   const { usuario } = useAuthContext()
   const role = usuario?.role as Role | undefined
-  const isGerente = role === 'gerente'
-  const isAdmin   = role === 'master' || role === 'admin'
+  const isGerente      = role === 'gerente'
+  const isTranspombal  = role === 'transpombal'
+  const isAdmin        = role === 'master' || role === 'admin' || isTranspombal
 
   const [data,        setData]        = useState(today())
   const [postoFiltro, setPostoFiltro] = useState('')

@@ -12,17 +12,21 @@ export async function GET(req: NextRequest) {
   const postoNomeParam = searchParams.get('posto_nome')
   const data = searchParams.get('data') ?? new Date().toISOString().slice(0, 10)
 
+  // Descobre role do usuário para saber se deve filtrar por posto
+  const { data: usuarioRow } = await admin.from('usuarios').select('role, posto_fechamento_id').eq('id', user.id).single()
+  const userRole = usuarioRow?.role ?? ''
+
   let q = admin.from('tanques_postos').select('*').eq('ativo', true).order('posto_nome').order('ordem')
 
   if (postoNomeParam) {
-    // Admin selecionou posto pelo nome
+    // Admin/transpombal selecionou posto pelo nome
     q = q.ilike('posto_nome', postoNomeParam)
+  } else if (['master', 'admin', 'transpombal', 'operador'].includes(userRole)) {
+    // Vê todos os postos — sem filtro
   } else {
-    // Gerente: descobre posto via posto_fechamento_id
-    const { data: usr } = await admin
-      .from('usuarios').select('posto_fechamento_id').eq('id', user.id).single()
-
-    if (usr?.posto_fechamento_id) {
+    // Gerente: filtra pelo posto vinculado
+    if (usuarioRow?.posto_fechamento_id) {
+      const usr = usuarioRow
       // Tenta primeiro por posto_id direto (após migration 055)
       const { data: porId } = await admin
         .from('tanques_postos')

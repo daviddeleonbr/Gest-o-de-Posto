@@ -382,16 +382,18 @@ export function Topbar() {
           <span className="hidden md:block font-bold text-[13px] text-white leading-tight">Gestão de Postos</span>
         </Link>
 
-        {/* Dashboard link */}
-        <Link href="/"
-          className={cn('hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium transition-colors flex-shrink-0',
-            pathname === '/'
-              ? 'bg-orange-500 text-white'
-              : 'text-[hsl(220,20%,60%)] hover:text-white hover:bg-white/[0.08]'
-          )}>
-          <LayoutDashboard className="w-3.5 h-3.5" />
-          <span>Dashboard</span>
-        </Link>
+        {/* Dashboard link — apenas para quem tem permissão */}
+        {canUser('dashboard.view') && (
+          <Link href="/"
+            className={cn('hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium transition-colors flex-shrink-0',
+              pathname === '/'
+                ? 'bg-orange-500 text-white'
+                : 'text-[hsl(220,20%,60%)] hover:text-white hover:bg-white/[0.08]'
+            )}>
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span>Dashboard</span>
+          </Link>
+        )}
 
         {/* Nav groups — desktop */}
         <nav ref={navRef} className="hidden md:flex items-center gap-0 flex-1 min-w-0">
@@ -579,10 +581,12 @@ export function Topbar() {
       {/* Mobile nav drawer */}
       {mobileOpen && (
         <div className="md:hidden border-t border-white/[0.06] bg-[hsl(222,44%,6%)] max-h-[70vh] overflow-y-auto">
-          <Link href="/" className={cn('flex items-center gap-2.5 px-4 py-3 text-[13px] font-medium border-b border-white/[0.04]',
-            pathname === '/' ? 'text-orange-300' : 'text-[hsl(220,20%,60%)]')}>
-            <LayoutDashboard className="w-4 h-4" /> Dashboard
-          </Link>
+          {canUser('dashboard.view') && (
+            <Link href="/" className={cn('flex items-center gap-2.5 px-4 py-3 text-[13px] font-medium border-b border-white/[0.04]',
+              pathname === '/' ? 'text-orange-300' : 'text-[hsl(220,20%,60%)]')}>
+              <LayoutDashboard className="w-4 h-4" /> Dashboard
+            </Link>
+          )}
           {NAV_GROUPS.map(group => {
             const visibleItems = group.items.filter(i => !i.permission || canUser(i.permission))
             if (!visibleItems.length) return null
