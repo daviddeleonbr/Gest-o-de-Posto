@@ -86,7 +86,6 @@ export async function buscarMovtosFormas(
     FROM movto
     WHERE empresa = ANY($1::bigint[])
       AND conta_debitar LIKE '1.3.%'
-      AND child >= 0
       AND data >= $2::date`
 
   if (dataFim) { params.push(dataFim); sql += ` AND data <= $${params.length}::date` }
@@ -127,7 +126,6 @@ export async function buscarMovtosDetalhe(
     FROM movto
     WHERE empresa = ANY($1::bigint[])
       AND conta_debitar = $2
-      AND child >= 0
       AND data >= $3::date`
 
   if (dataFim) { params.push(dataFim); sql += ` AND data <= $${params.length}::date` }
