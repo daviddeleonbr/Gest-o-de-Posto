@@ -196,7 +196,14 @@ export default function TanquesPage() {
             <span className="text-sm">Carregando tanques…</span>
           </div>
         ) : !postoAtual ? (
-          <div className="text-center py-20 text-gray-400 text-sm">Nenhum posto encontrado para sua conta.</div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800 space-y-2">
+            <p className="font-semibold">Nenhum tanque encontrado para o seu posto.</p>
+            <p className="text-amber-600 text-[12px]">
+              O nome do posto vinculado à sua conta pode estar diferente do cadastrado nos tanques.
+              Peça ao administrador para executar a migration <strong>055_tanques_posto_id.sql</strong> no Supabase
+              e verificar se o posto está vinculado corretamente.
+            </p>
+          </div>
         ) : (
           <>
             {/* KPI row */}
