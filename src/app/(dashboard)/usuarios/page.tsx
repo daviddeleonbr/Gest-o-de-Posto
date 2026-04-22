@@ -438,8 +438,8 @@ export default function UsuariosPage() {
   }
 
   const availableRoles: Role[] = role === 'master'
-    ? ['master', 'admin', 'operador', 'conciliador', 'fechador', 'marketing', 'gerente']
-    : ['operador', 'conciliador', 'fechador', 'marketing', 'gerente']
+    ? ['master', 'admin', 'operador', 'conciliador', 'fechador', 'marketing', 'gerente', 'transpombal']
+    : ['operador', 'conciliador', 'fechador', 'marketing', 'gerente', 'transpombal']
 
   const columns: ColumnDef<Usuario>[] = [
     {
@@ -929,11 +929,26 @@ export default function UsuariosPage() {
               </div>
             )}
             {form.role === 'gerente' && (
-              <div className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-lg px-3 py-2.5 text-[12px] text-teal-700">
-                <MapPin className="w-3.5 h-3.5 shrink-0" />
-                {selected
-                  ? 'Após salvar, use o botão de posto na lista para vincular o posto deste gerente.'
-                  : 'Após criar o usuário, use o botão de posto na lista para vincular o posto deste gerente.'}
+              <div className="space-y-1.5">
+                <Label className="text-[12px] font-medium text-gray-600">
+                  Posto do gerente <span className="text-red-500">*</span>
+                </Label>
+                {postosForm.length === 0 ? (
+                  <p className="text-[12px] text-gray-400 italic">
+                    {form.empresa_id ? 'Nenhum posto encontrado para esta empresa.' : 'Selecione a empresa primeiro.'}
+                  </p>
+                ) : (
+                  <Select
+                    value={form.posto_fechamento_id}
+                    onValueChange={v => setForm(p => ({ ...p, posto_fechamento_id: v }))}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecione o posto..." /></SelectTrigger>
+                    <SelectContent>
+                      {postosForm.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+                <p className="text-[11px] text-gray-400">O gerente verá somente os tanques e medições do posto selecionado.</p>
               </div>
             )}
           </div>

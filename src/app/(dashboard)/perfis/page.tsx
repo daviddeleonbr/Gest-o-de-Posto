@@ -27,8 +27,9 @@ const ROLES_SISTEMA: { role: Role; cor: string }[] = [
   { role: 'operador',    cor: 'bg-green-100 text-green-700 border-green-200' },
   { role: 'conciliador', cor: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
   { role: 'fechador',    cor: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { role: 'marketing',   cor: 'bg-pink-100 text-pink-700 border-pink-200' },
-  { role: 'gerente',     cor: 'bg-teal-100 text-teal-700 border-teal-200' },
+  { role: 'marketing',    cor: 'bg-pink-100 text-pink-700 border-pink-200' },
+  { role: 'gerente',      cor: 'bg-teal-100 text-teal-700 border-teal-200' },
+  { role: 'transpombal',  cor: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
 ]
 
 // ─── Grupos de permissões completos ───────────────────────────────────────────
