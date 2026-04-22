@@ -149,7 +149,7 @@ export const PERMISSIONS = {
   'transpombal.edit': ['master', 'admin', 'transpombal'],
 
   // Medição de Tanques — gerentes registram o nível diário
-  'tanques.view': ['master', 'admin', 'operador', 'gerente'],
+  'tanques.view': ['master', 'admin', 'operador', 'gerente', 'transpombal'],
   'tanques.edit': ['master', 'admin', 'gerente'],
 
   // Marketing
