@@ -104,9 +104,10 @@ export async function POST(req: NextRequest) {
 
     const postoId = t.posto_id ?? (t.recorrente as any)?.posto_id ?? posto?.id ?? null
     const contaCodigo: string | null = postoId ? (contaMap[postoId] ?? null) : null
+    // Sempre verifica só o dia específico da tarefa — extrato_periodo_ini é apenas
+    // metadado do arquivo que foi usado (multi-dias), não o range a re-verificar.
     const dataFim = t.extrato_data as string
-    const dataIni = (t.extrato_periodo_ini as string | null) ?? dataFim
-    const datas   = gerarDatas(dataIni, dataFim)
+    const datas   = [dataFim]
 
     let movAtual: number
     try {

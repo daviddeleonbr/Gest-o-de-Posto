@@ -184,7 +184,7 @@ export async function POST(req: NextRequest) {
       extrato_arquivo_path:   nomeArquivo,
       extrato_arquivo_nome:   file.name,
       extrato_data:           dia.data,
-      extrato_periodo_ini:    periodoIni,
+      extrato_periodo_ini:    dia.data,
       extrato_saldo_dia:      dia.saldoDia,
       extrato_saldo_anterior: dia.saldoAnterior,
       extrato_movimento:      dia.movimento,
