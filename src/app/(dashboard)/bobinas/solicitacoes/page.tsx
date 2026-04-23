@@ -295,7 +295,7 @@ export default function SolicitacoesPage() {
 
   return (
     <div className="animate-fade-in">
-      <Header title="Solicitações de Bobinas" description="Gerencie as solicitações de troca" />
+      <Header title="Troca de Maquininhas" description="Gerencie as solicitações de troca de maquininhas" />
 
       {/* Toasts */}
       <div className="fixed top-4 right-4 z-50 space-y-2">

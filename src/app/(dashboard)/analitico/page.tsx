@@ -480,7 +480,7 @@ export default function AnaliticoPage() {
   const mediaParc = taxRows.filter(r => r.taxa_credito_parcelado !== null).reduce((s, r) => s + (r.taxa_credito_parcelado ?? 0), 0) / (taxRows.filter(r => r.taxa_credito_parcelado !== null).length || 1)
 
   const TABS = [
-    { id: 'dre',         label: 'Análise DRE',  icon: BarChart2  },
+    { id: 'dre',         label: 'Análise de Taxa',  icon: BarChart2  },
     { id: 'maquininhas', label: 'Gráficos',      icon: BarChart2  },
     { id: 'alugueis',    label: 'Aluguéis',      icon: DollarSign },
     { id: 'taxas',       label: 'Taxas',          icon: Percent    },

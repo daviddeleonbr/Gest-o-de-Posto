@@ -17,7 +17,7 @@ import { useAuthContext } from '@/contexts/AuthContext'
 import { can } from '@/lib/utils/permissions'
 import { cn } from '@/lib/utils/cn'
 import { formatCurrency } from '@/lib/utils/formatters'
-import { Plus, Pencil, Trash2, Loader2, Smartphone, MapPin, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Smartphone, MapPin, Search, Power, PowerOff, Package, PackageX } from 'lucide-react'
 import type { Maquininha, Posto, Adquirente, StatusMaquininha, Role } from '@/types/database.types'
 
 const STATUS_OPTS: { value: StatusMaquininha; label: string; pill: string }[] = [
@@ -103,6 +103,20 @@ export default function MaquininhasPage() {
       setOpenForm(false); load()
     }
     setSaving(false)
+  }
+
+  const [quickSaving, setQuickSaving] = useState<string | null>(null)
+
+  async function handleQuickStatus(m: MaquininhaRow, novoStatus: StatusMaquininha) {
+    setQuickSaving(m.id)
+    const { error } = await supabase.from('maquininhas').update({ status: novoStatus }).eq('id', m.id)
+    if (error) {
+      toast({ variant: 'destructive', title: 'Erro ao atualizar status', description: error.message })
+    } else {
+      toast({ title: `Maquininha ${novoStatus === 'ativo' ? 'ativada' : novoStatus === 'inativo' ? 'inativada' : novoStatus === 'estoque' ? 'movida para estoque' : 'removida do estoque'}!` })
+      load()
+    }
+    setQuickSaving(null)
   }
 
   async function handleDelete() {
@@ -281,11 +295,55 @@ export default function MaquininhasPage() {
                           </td>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-1 justify-end">
-                              {can(role ?? null, 'maquininhas.edit') && (
+                              {can(role ?? null, 'maquininhas.edit') && (<>
+                                {/* Ativar / Inativar */}
+                                {m.status !== 'ativo' ? (
+                                  <Button
+                                    variant="ghost" size="icon"
+                                    className="h-7 w-7 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50"
+                                    onClick={() => handleQuickStatus(m, 'ativo')}
+                                    disabled={quickSaving === m.id}
+                                    title="Ativar"
+                                  >
+                                    {quickSaving === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" />}
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost" size="icon"
+                                    className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                    onClick={() => handleQuickStatus(m, 'inativo')}
+                                    disabled={quickSaving === m.id}
+                                    title="Inativar"
+                                  >
+                                    {quickSaving === m.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PowerOff className="w-3.5 h-3.5" />}
+                                  </Button>
+                                )}
+                                {/* Entrar / Sair do estoque */}
+                                {m.status !== 'estoque' ? (
+                                  <Button
+                                    variant="ghost" size="icon"
+                                    className="h-7 w-7 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                                    onClick={() => handleQuickStatus(m, 'estoque')}
+                                    disabled={quickSaving === m.id}
+                                    title="Mover para Estoque"
+                                  >
+                                    <Package className="w-3.5 h-3.5" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost" size="icon"
+                                    className="h-7 w-7 text-blue-500 hover:text-gray-600 hover:bg-gray-100"
+                                    onClick={() => handleQuickStatus(m, 'ativo')}
+                                    disabled={quickSaving === m.id}
+                                    title="Remover do Estoque (Ativar)"
+                                  >
+                                    <PackageX className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => openEdit(m)} title="Editar">
                                   <Pencil className="w-3.5 h-3.5" />
                                 </Button>
-                              )}
+                              </>)}
                               {can(role ?? null, 'maquininhas.delete') && (
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-400 hover:text-red-600 hover:bg-red-50" onClick={() => { setSelected(m); setOpenDelete(true) }} title="Excluir">
                                   <Trash2 className="w-3.5 h-3.5" />

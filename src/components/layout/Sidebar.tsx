@@ -117,7 +117,7 @@ const NAV_GROUPS: NavGroup[] = [
       {
         label: 'Maquininhas', icon: Layers, permission: 'bobinas.view' as Permission,
         children: [
-          { href: '/bobinas/solicitacoes', label: 'Solicitações',      icon: Receipt,  permission: 'bobinas.view' as Permission },
+          { href: '/bobinas/solicitacoes', label: 'Troca de Maquininhas', icon: Receipt,  permission: 'bobinas.view' as Permission },
           { href: '/bobinas/trocas',       label: 'Trocas',            icon: Archive,  permission: 'bobinas.view' as Permission },
           { href: '/bobinas/estoque',      label: 'Estoque de Bobinas', icon: Archive, permission: 'bobinas.view' as Permission },
         ],

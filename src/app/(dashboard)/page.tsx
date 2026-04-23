@@ -89,6 +89,7 @@ function CustomTooltip({ active, payload, label }: any) {
 
 interface CaixaRow { grid: string; nome: string; ultimo_caixa_fechado: string | null }
 interface TarefaResumida { id: string; titulo: string; descricao: string | null; status: string; prioridade: string; data_conclusao_prevista: string | null; posto: { nome: string } | null }
+interface SolicitacaoResumida { id: string; tipo: 'bobina' | 'desinstalacao'; status: 'pendente' | 'atendida' | 'cancelada' | 'solicitado'; observacoes: string | null; criado_em: string; postos: { nome: string } | null }
 
 function diffDias(iso: string) {
   const hoje = new Date(); hoje.setHours(0,0,0,0)
@@ -109,17 +110,18 @@ export default function DashboardPage() {
     if (role === 'gerente')     { router.replace('/tanques');     return }
   }, [usuario, role])
 
-  const [data,    setData]    = useState<DashboardEmpresa | null>(null)
-  const [caixas,  setCaixas]  = useState<CaixaRow[]>([])
-  const [tarefas, setTarefas] = useState<TarefaResumida[]>([])
-  const [loading, setLoading] = useState(true)
-  const [lastSync, setLastSync] = useState<string | null>(null)
+  const [data,         setData]         = useState<DashboardEmpresa | null>(null)
+  const [caixas,       setCaixas]       = useState<CaixaRow[]>([])
+  const [tarefas,      setTarefas]      = useState<TarefaResumida[]>([])
+  const [solicitacoes, setSolicitacoes] = useState<SolicitacaoResumida[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [lastSync,     setLastSync]     = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
       if (!usuario || isRestrito) { setLoading(false); return }
 
-      const [viewRes, caixaRes, tarefasRes] = await Promise.all([
+      const [viewRes, caixaRes, tarefasRes, solicitacoesRes] = await Promise.all([
         (() => {
           let q = supabase.from('vw_dashboard_empresa').select('*')
           if (usuario.role !== 'master') q = q.eq('empresa_id', usuario.empresa_id)
@@ -131,6 +133,11 @@ export default function DashboardPage() {
           .in('status', ['pendente', 'em_andamento'])
           .order('data_conclusao_prevista', { ascending: true, nullsFirst: false })
           .limit(6),
+        supabase.from('solicitacoes_bobinas')
+          .select('id, tipo, status, observacoes, criado_em, postos(nome)')
+          .in('status', ['pendente', 'solicitado'])
+          .order('criado_em', { ascending: true })
+          .limit(5),
       ])
 
       const { data: rows } = viewRes
@@ -157,6 +164,7 @@ export default function DashboardPage() {
       } catch {}
 
       if (tarefasRes.data) setTarefas(tarefasRes.data as unknown as TarefaResumida[])
+      if (solicitacoesRes.data) setSolicitacoes(solicitacoesRes.data as unknown as SolicitacaoResumida[])
 
       setLastSync(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }))
       setLoading(false)
@@ -413,6 +421,60 @@ export default function DashboardPage() {
                       t.status === 'em_andamento' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-gray-100 text-gray-600 border-gray-200'
                     )}>
                       {t.status === 'em_andamento' ? 'Em andamento' : 'Pendente'}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Solicitações de Bobinas pendentes ── */}
+        {!isRestrito && !loading && solicitacoes.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                  <Wrench className="w-4 h-4 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-[13px] font-semibold text-gray-800">Solicitações de Maquininhas</p>
+                  <p className="text-[11px] text-gray-400">{solicitacoes.length} aguardando atendimento</p>
+                </div>
+              </div>
+              <Link href="/bobinas/solicitacoes" className="text-[11px] text-[#8B1A14] font-medium hover:underline flex items-center gap-1">
+                Ver todas <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {solicitacoes.map(s => {
+                const statusCls: Record<string, string> = {
+                  pendente:   'bg-yellow-100 text-yellow-700 border-yellow-200',
+                  solicitado: 'bg-purple-100 text-purple-700 border-purple-200',
+                }
+                const statusLabel: Record<string, string> = {
+                  pendente:   'Pendente',
+                  solicitado: 'Solicitado',
+                }
+                const tipoCls = s.tipo === 'desinstalacao' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
+                const tipoLabel = s.tipo === 'desinstalacao' ? 'Desinstalação' : 'Troca de Maquininha'
+                const [y, m, d] = s.criado_em.slice(0, 10).split('-')
+                return (
+                  <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <div className={cn('text-[10px] font-semibold px-2 py-1 rounded-lg flex-shrink-0', tipoCls)}>
+                      {tipoLabel}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-medium text-gray-800 leading-tight truncate">
+                        {(s.postos as any)?.nome ?? '—'}
+                      </p>
+                      {s.observacoes && (
+                        <p className="text-[11px] text-gray-500 truncate mt-0.5">{s.observacoes}</p>
+                      )}
+                      <p className="text-[10px] text-gray-400 mt-0.5">{d}/{m}/{y}</p>
+                    </div>
+                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border flex-shrink-0', statusCls[s.status] ?? 'bg-gray-100 text-gray-600 border-gray-200')}>
+                      {statusLabel[s.status] ?? s.status}
                     </span>
                   </div>
                 )
