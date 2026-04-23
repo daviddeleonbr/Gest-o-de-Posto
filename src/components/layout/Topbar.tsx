@@ -102,7 +102,7 @@ const NAV_GROUPS: NavGroup[] = [
           { href: '/bobinas/estoque',      label: 'Estoque',      icon: Archive,  permission: 'bobinas.view' as Permission },
         ],
       },
-      { href: '/tarefas/avulsas', label: 'Tarefas Avulsas',         icon: ClipboardList, permission: 'tarefas.view' as Permission },
+      { href: '/tarefas/avulsas', label: 'Tarefas',         icon: ClipboardList, permission: 'tarefas.view' as Permission },
       { href: '/transpombal',     label: 'Transpombal — Frota',    icon: Truck,         permission: 'transpombal.view' as Permission },
       { href: '/tanques',         label: 'Medição de Tanques',     icon: Fuel,          permission: 'tanques.view' as Permission },
     ],
