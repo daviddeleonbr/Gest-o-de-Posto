@@ -14,6 +14,7 @@ import {
   Smartphone, Percent, MapPin, Link2,
   KeyRound, Monitor, Server, Building2,
   CheckCircle2, AlertTriangle, Clock, HelpCircle, RefreshCw,
+  Truck, Droplets, Package, ShoppingBag, ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { formatPercent, formatDate, formatCurrency } from '@/lib/utils/formatters'
@@ -300,7 +301,7 @@ interface ReportDef {
   iconColor: string
   iconBg: string
   permission: Permission
-  fetch: (supabase: ReturnType<typeof createClient>, role: Role | undefined) => Promise<ReportData>
+  fetch: (supabase: ReturnType<typeof createClient>, role?: Role) => Promise<ReportData>
 }
 
 const REPORTS: ReportDef[] = [
@@ -586,6 +587,298 @@ const REPORTS: ReportDef[] = [
         columns,
         rows,
       }
+    },
+  },
+
+  // ── Transpombal — Carregamentos ─────────────────────────
+  {
+    id: 'transpombal-carregamentos',
+    title: 'Transpombal — Carregamentos',
+    description: 'Histórico de carregamentos com motorista, origem, placas e status.',
+    icon: Truck,
+    iconColor: 'text-yellow-700',
+    iconBg: 'bg-yellow-100',
+    permission: 'transpombal.view',
+    fetch: async (supabase) => {
+      const { data } = await supabase
+        .from('transpombal_carregamentos')
+        .select('data_carregamento, origem, motorista_nome, placas, status, observacoes, itens:transpombal_itens(produto, posto_nome, capacidade_m3, status)')
+        .order('data_carregamento', { ascending: false })
+        .limit(500)
+
+      const STATUS_LABEL: Record<string, string> = {
+        planejado: 'Planejado', em_rota: 'Em Rota', concluido: 'Concluído', cancelado: 'Cancelado',
+      }
+
+      const columns: ReportColumn[] = [
+        { header: 'Data',       key: 'data',       width: 14 },
+        { header: 'Origem',     key: 'origem',     width: 14 },
+        { header: 'Motorista',  key: 'motorista',  width: 24 },
+        { header: 'Placas',     key: 'placas',     width: 18 },
+        { header: 'Status',     key: 'status',     width: 14 },
+        { header: 'Itens',      key: 'itens',      width: 12 },
+        { header: 'Observações', key: 'obs',       width: 28 },
+      ]
+
+      const rows = (data ?? []).map(r => ({
+        data:      r.data_carregamento ?? '—',
+        origem:    r.origem ?? '—',
+        motorista: r.motorista_nome ?? '—',
+        placas:    Array.isArray(r.placas) ? (r.placas as string[]).join(', ') : '—',
+        status:    STATUS_LABEL[r.status] ?? r.status,
+        itens:     String(Array.isArray(r.itens) ? r.itens.length : 0),
+        obs:       r.observacoes ?? '—',
+      }))
+
+      return { title: 'Transpombal — Carregamentos', columns, rows }
+    },
+  },
+
+  // ── Transpombal — Motoristas ─────────────────────────────
+  {
+    id: 'transpombal-motoristas',
+    title: 'Transpombal — Motoristas',
+    description: 'Motoristas cadastrados na frota Transpombal.',
+    icon: Truck,
+    iconColor: 'text-yellow-600',
+    iconBg: 'bg-yellow-50',
+    permission: 'transpombal.view',
+    fetch: async (supabase) => {
+      const { data } = await supabase
+        .from('transpombal_motoristas')
+        .select('nome, cpf, cnh, telefone, ativo, observacoes')
+        .order('nome')
+
+      const columns: ReportColumn[] = [
+        { header: 'Nome',        key: 'nome',        width: 28 },
+        { header: 'CPF',         key: 'cpf',         width: 18 },
+        { header: 'CNH',         key: 'cnh',         width: 16 },
+        { header: 'Telefone',    key: 'telefone',    width: 18 },
+        { header: 'Status',      key: 'status',      width: 12 },
+        { header: 'Observações', key: 'obs',         width: 28 },
+      ]
+
+      const rows = (data ?? []).map(r => ({
+        nome:     r.nome ?? '—',
+        cpf:      (r as any).cpf ?? '—',
+        cnh:      (r as any).cnh ?? '—',
+        telefone: (r as any).telefone ?? '—',
+        status:   (r as any).ativo ? 'Ativo' : 'Inativo',
+        obs:      (r as any).observacoes ?? '—',
+      }))
+
+      return { title: 'Transpombal — Motoristas', columns, rows }
+    },
+  },
+
+  // ── Medições de Tanques ──────────────────────────────────
+  {
+    id: 'medicoes-tanques',
+    title: 'Medições de Tanques',
+    description: 'Histórico de medições de nível dos tanques por posto.',
+    icon: Droplets,
+    iconColor: 'text-cyan-600',
+    iconBg: 'bg-cyan-100',
+    permission: 'tanques.view',
+    fetch: async (supabase) => {
+      const { data } = await supabase
+        .from('medicoes_tanques')
+        .select('posto_nome, tanque_id, data, medida_litros')
+        .order('data', { ascending: false })
+        .order('posto_nome')
+        .limit(1000)
+
+      const columns: ReportColumn[] = [
+        { header: 'Data',          key: 'data',          width: 14 },
+        { header: 'Posto',         key: 'posto',         width: 28 },
+        { header: 'Tanque',        key: 'tanque',        width: 20 },
+        { header: 'Nível (litros)', key: 'medida',       width: 18 },
+      ]
+
+      const rows = (data ?? []).map(r => ({
+        data:   r.data ?? '—',
+        posto:  r.posto_nome ?? '—',
+        tanque: r.tanque_id ?? '—',
+        medida: r.medida_litros != null ? String(r.medida_litros) : '—',
+      }))
+
+      return { title: 'Medições de Tanques', subtitle: 'Últimas 1.000 medições registradas', columns, rows }
+    },
+  },
+
+  // ── Estoque Combustíveis ─────────────────────────────────
+  {
+    id: 'estoque-combustiveis',
+    title: 'Estoque de Combustíveis',
+    description: 'Estoque atual de combustíveis por posto com custo médio e valor total.',
+    icon: Package,
+    iconColor: 'text-red-600',
+    iconBg: 'bg-red-100',
+    permission: 'estoque.view',
+    fetch: async () => {
+      const res = await fetch('/api/estoque/combustiveis')
+      const json = await res.json()
+
+      const columns: ReportColumn[] = [
+        { header: 'Posto',        key: 'posto',        width: 26 },
+        { header: 'Produto',      key: 'produto',      width: 26 },
+        { header: 'Estoque (L)',  key: 'estoque',      width: 16 },
+        { header: 'Custo Médio',  key: 'custo_medio',  width: 16 },
+        { header: 'Valor Total',  key: 'valor_total',  width: 18 },
+        { header: 'Referência',   key: 'data_ref',     width: 14 },
+      ]
+
+      const rows: Record<string, string>[] = []
+      for (const posto of (json.dados ?? [])) {
+        for (const p of posto.produtos ?? []) {
+          rows.push({
+            posto:       posto.posto_nome,
+            produto:     p.produto_nome,
+            estoque:     p.estoque_total.toFixed(0),
+            custo_medio: formatCurrency(p.custo_medio),
+            valor_total: formatCurrency(p.valor_total),
+            data_ref:    p.data_referencia ?? '—',
+          })
+        }
+      }
+
+      return { title: 'Estoque de Combustíveis', columns, rows }
+    },
+  },
+
+  // ── Estoque Conveniência ─────────────────────────────────
+  {
+    id: 'estoque-conveniencia',
+    title: 'Estoque de Conveniência',
+    description: 'Produtos em estoque na conveniência por posto e subgrupo.',
+    icon: ShoppingBag,
+    iconColor: 'text-pink-600',
+    iconBg: 'bg-pink-100',
+    permission: 'estoque.view',
+    fetch: async () => {
+      const res = await fetch('/api/estoque/conveniencia')
+      const json = await res.json()
+
+      const columns: ReportColumn[] = [
+        { header: 'Posto',       key: 'posto',       width: 24 },
+        { header: 'Subgrupo',    key: 'subgrupo',    width: 20 },
+        { header: 'Produto',     key: 'produto',     width: 28 },
+        { header: 'Estoque',     key: 'estoque',     width: 12 },
+        { header: 'Custo Médio', key: 'custo_medio', width: 16 },
+        { header: 'Valor Total', key: 'valor_total', width: 16 },
+      ]
+
+      const rows: Record<string, string>[] = []
+      for (const posto of (json.dados ?? [])) {
+        for (const sub of posto.subgrupos ?? []) {
+          for (const p of sub.produtos ?? []) {
+            rows.push({
+              posto:       posto.posto_nome,
+              subgrupo:    sub.subgrupo_nome,
+              produto:     p.produto_nome,
+              estoque:     `${p.estoque_total.toFixed(0)} ${p.unid_med}`,
+              custo_medio: formatCurrency(p.custo_medio),
+              valor_total: formatCurrency(p.valor_total),
+            })
+          }
+        }
+      }
+
+      return { title: 'Estoque de Conveniência', columns, rows }
+    },
+  },
+
+  // ── Troca de Maquininhas ─────────────────────────────────
+  {
+    id: 'troca-maquininhas',
+    title: 'Troca de Maquininhas',
+    description: 'Solicitações de troca e desinstalação de maquininhas por posto.',
+    icon: Smartphone,
+    iconColor: 'text-violet-600',
+    iconBg: 'bg-violet-100',
+    permission: 'maquininhas.view',
+    fetch: async (supabase) => {
+      const { data } = await supabase
+        .from('solicitacoes_bobinas')
+        .select('tipo, status, solicitado_por, observacoes, criado_em, postos(nome), adquirente_solicitado:adquirentes!adquirente_solicitado_id(nome)')
+        .order('criado_em', { ascending: false })
+
+      const TIPO_LABEL: Record<string, string> = {
+        troca: 'Troca de Maquininha',
+        desinstalacao: 'Desinstalação',
+        bobina: 'Troca de Maquininha',
+      }
+      const STATUS_LABEL: Record<string, string> = {
+        pendente: 'Pendente', solicitado: 'Solicitado', concluido: 'Concluído', cancelada: 'Cancelada',
+      }
+
+      const columns: ReportColumn[] = [
+        { header: 'Data',        key: 'data',        width: 14 },
+        { header: 'Posto',       key: 'posto',       width: 26 },
+        { header: 'Tipo',        key: 'tipo',        width: 22 },
+        { header: 'Adquirente',  key: 'adquirente',  width: 18 },
+        { header: 'Status',      key: 'status',      width: 14 },
+        { header: 'Solicitante', key: 'solicitante', width: 20 },
+        { header: 'Observações', key: 'obs',         width: 30 },
+      ]
+
+      const rows = (data ?? []).map(r => ({
+        data:        formatDate(r.criado_em),
+        posto:       (r.postos as { nome?: string } | null)?.nome ?? '—',
+        tipo:        TIPO_LABEL[r.tipo] ?? r.tipo,
+        adquirente:  ((r.adquirente_solicitado as any)?.nome) ?? '—',
+        status:      STATUS_LABEL[r.status] ?? r.status,
+        solicitante: (r as any).solicitado_por ?? '—',
+        obs:         r.observacoes ?? '—',
+      }))
+
+      return { title: 'Troca de Maquininhas', columns, rows }
+    },
+  },
+
+  // ── Tarefas ──────────────────────────────────────────────
+  {
+    id: 'tarefas',
+    title: 'Tarefas',
+    description: 'Tarefas do sistema com status, responsável e prazo.',
+    icon: ClipboardList,
+    iconColor: 'text-indigo-600',
+    iconBg: 'bg-indigo-100',
+    permission: 'postos.view',
+    fetch: async (supabase) => {
+      const { data } = await supabase
+        .from('tarefas')
+        .select('titulo, tipo, status, data_conclusao_prevista, data_conclusao_real, criado_em, posto:postos(nome), responsavel:usuarios(nome)')
+        .order('criado_em', { ascending: false })
+        .limit(500)
+
+      const STATUS_LABEL: Record<string, string> = {
+        pendente: 'Pendente', em_andamento: 'Em Andamento', concluida: 'Concluída', cancelada: 'Cancelada',
+      }
+
+      const columns: ReportColumn[] = [
+        { header: 'Data',         key: 'data',         width: 14 },
+        { header: 'Título',       key: 'titulo',       width: 36 },
+        { header: 'Tipo',         key: 'tipo',         width: 18 },
+        { header: 'Posto',        key: 'posto',        width: 24 },
+        { header: 'Responsável',  key: 'responsavel',  width: 20 },
+        { header: 'Status',       key: 'status',       width: 14 },
+        { header: 'Prazo',        key: 'prazo',        width: 14 },
+        { header: 'Conclusão',    key: 'conclusao',    width: 14 },
+      ]
+
+      const rows = (data ?? []).map(r => ({
+        data:        formatDate(r.criado_em),
+        titulo:      r.titulo ?? '—',
+        tipo:        r.tipo ?? '—',
+        posto:       (r.posto as { nome?: string } | null)?.nome ?? '—',
+        responsavel: (r.responsavel as { nome?: string } | null)?.nome ?? '—',
+        status:      STATUS_LABEL[r.status] ?? r.status,
+        prazo:       r.data_conclusao_prevista ? formatDate(r.data_conclusao_prevista) : '—',
+        conclusao:   r.data_conclusao_real ? formatDate(r.data_conclusao_real) : '—',
+      }))
+
+      return { title: 'Tarefas', subtitle: 'Últimas 500 tarefas cadastradas', columns, rows }
     },
   },
 

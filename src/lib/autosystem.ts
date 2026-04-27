@@ -77,20 +77,31 @@ export async function buscarMovtosContasReceber(
 
 export async function buscarMovtosFormas(
   empresaIds: number[],
-  opts: { dataIni?: string; dataFim?: string | null },
+  opts: { venctoIni?: string; venctoFim?: string | null },
 ): Promise<Record<string, unknown>[]> {
-  const { dataIni = '2026-01-01', dataFim } = opts
-  const params: unknown[] = [empresaIds, dataIni]
+  const { venctoIni = '2026-01-01', venctoFim } = opts
+  const params: unknown[] = [empresaIds, venctoIni]
   let sql = `
-    SELECT conta_debitar::text, empresa::bigint, pessoa::bigint, data::text, vencto::text, valor::float, child::float, mlid::bigint
+    SELECT grid::bigint, conta_debitar::text, empresa::bigint, pessoa::bigint, data::text, vencto::text, valor::float, child::float, mlid::bigint
     FROM movto
     WHERE empresa = ANY($1::bigint[])
       AND conta_debitar LIKE '1.3.%'
-      AND data >= $2::date`
+      AND vencto >= $2::date`
 
-  if (dataFim) { params.push(dataFim); sql += ` AND data <= $${params.length}::date` }
+  if (venctoFim) { params.push(venctoFim); sql += ` AND vencto <= $${params.length}::date` }
   sql += ` LIMIT 100000`
   return query(sql, params)
+}
+
+// Recebe grids de movtos originais e retorna quais possuem entrada de baixa apontando para eles.
+// Detecta o baixe via child = grid_original, que cobre cofre, Stone e qualquer forma de baixa.
+export async function buscarGridsBaixados(grids: number[]): Promise<number[]> {
+  if (!grids.length) return []
+  const rows = await query<{ grid: number }>(
+    `SELECT DISTINCT child::bigint AS grid FROM movto WHERE child = ANY($1::bigint[]) AND child > 0`,
+    [grids],
+  )
+  return rows.map(r => Number(r.grid))
 }
 
 export async function buscarMovtosMotivoFormas(

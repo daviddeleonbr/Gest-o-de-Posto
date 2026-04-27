@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const movtosRaw = await buscarMovtosFormas(empresaIds, { dataIni: venctoIniEfetivo, dataFim: venctoFim })
+  const movtosRaw = await buscarMovtosFormas(empresaIds, { venctoIni: venctoIniEfetivo, venctoFim })
 
   const pessoaIds = [...new Set((movtosRaw as any[]).map(m => m.pessoa).filter(Boolean))] as number[]
   const pessoaLookup: Record<number, string> = {}
@@ -62,8 +62,12 @@ export async function GET(req: NextRequest) {
 
   for (const m of movtosRaw as any[]) {
     const pessoa_nome = m.pessoa ? (pessoaLookup[m.pessoa] ?? '(sem cliente)') : '(sem cliente)'
-    const mes         = (m.data as string)?.slice(0, 7) ?? ''
-    const pago        = (m.child as number) !== 0
+    // Usa vencto para agrupar por mês de competência; fallback em data se vencto ausente
+    const mesBase     = (m.vencto as string | null) ?? (m.data as string | null) ?? ''
+    const mes         = mesBase.slice(0, 7)
+    // child = null ou -1 → A Receber; child >= 0 → Recebido (confirmado)
+    const childVal    = m.child as number | null
+    const pago        = childVal !== null && childVal >= 0
     const key         = `${m.conta_debitar}|${m.empresa}|${pessoa_nome}|${mes}|${pago}`
     if (!agg[key]) agg[key] = {
       conta_debitar: m.conta_debitar ?? '',
@@ -97,7 +101,7 @@ export async function GET(req: NextRequest) {
     const aggM: Record<string, { motivo: number; empresa: string; mes: string; pago: boolean; qtd: number; valor_total: number }> = {}
     for (const m of motivoMovtos as any[]) {
       const mes  = (m.data as string)?.slice(0, 7) ?? ''
-      const pago = (m.child as number) > 0
+      const pago = (m.child as number) >= 0
       const key  = `${m.motivo}|${m.empresa}|${mes}|${pago}`
       if (!aggM[key]) aggM[key] = { motivo: m.motivo, empresa: String(m.empresa), mes, pago, qtd: 0, valor_total: 0 }
       aggM[key].qtd         += 1
