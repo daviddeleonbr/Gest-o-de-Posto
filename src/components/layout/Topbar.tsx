@@ -202,7 +202,7 @@ function NotificationBell() {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => { setAberto(v => !v); if (!aberto) carregar() }}
-        className="relative w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(220,20%,55%)] hover:text-white hover:bg-white/[0.08] transition-colors">
+        className="relative w-8 h-8 rounded-lg flex items-center justify-center text-white hover:bg-white/[0.10] transition-colors">
         <Bell className="w-4 h-4" />
         {naoLidas > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
@@ -378,25 +378,27 @@ export function Topbar() {
 
   return (
     <>
-    <header className="sticky top-0 z-40 w-full bg-[#1a0704] border-b border-white/[0.06] flex-shrink-0">
+    <header className="sticky top-0 z-40 w-full bg-[#8b1a14] border-b border-black/10 flex-shrink-0">
       <div className="flex items-center h-[52px] px-3 md:px-4 gap-2">
 
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 flex-shrink-0 mr-2">
-          <img src="/logo.svg" alt="Pedra do Pombal" className="w-7 h-7 flex-shrink-0" />
-          <div className="hidden md:block leading-tight">
-            <p className="text-[9px] font-bold text-white/40 tracking-[0.15em] uppercase">Grupo</p>
-            <p className="text-[13px] font-extrabold text-white leading-none -mt-0.5">Pedra do Pombal</p>
-          </div>
+        <Link href="/" className="flex items-center gap-1 flex-shrink-0">
+          <img src="/logo.png" alt="Pedra do Pombal" className="h-10 w-auto flex-shrink-0" />
+          <span className="hidden md:block text-[14px] font-extrabold text-white tracking-tight whitespace-nowrap">
+            Pedra do Pombal
+          </span>
         </Link>
+
+        {/* Divider entre a marca e o menu */}
+        <div className="hidden md:block w-px h-6 bg-white/20 mx-3 flex-shrink-0" aria-hidden />
 
         {/* Dashboard link — apenas para quem tem permissão */}
         {canUser('dashboard.view') && (
           <Link href="/"
             className={cn('hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium transition-colors flex-shrink-0',
               pathname === '/'
-                ? 'bg-[#8b1a14] text-white'
-                : 'text-white/50 hover:text-white hover:bg-white/[0.08]'
+                ? 'bg-white/[0.18] text-white'
+                : 'text-white/70 hover:text-white hover:bg-white/[0.10]'
             )}>
             <LayoutDashboard className="w-3.5 h-3.5" />
             <span>Dashboard</span>
@@ -420,10 +422,10 @@ export function Topbar() {
                 <Link key={group.label} href={item.href!}
                   className={cn('flex items-center gap-1 px-3 py-1.5 h-[52px] text-[12.5px] font-medium transition-colors whitespace-nowrap border-b-2 flex-shrink-0',
                     active
-                      ? 'text-white border-[#8b1a14] bg-white/[0.06]'
+                      ? 'text-white border-white bg-white/[0.12]'
                       : isGroupActive
-                        ? 'text-white border-[#8b1a14]/60'
-                        : 'text-white/50 hover:text-white hover:bg-white/[0.05] border-transparent'
+                        ? 'text-white border-white/60'
+                        : 'text-white/70 hover:text-white hover:bg-white/[0.10] border-transparent'
                   )}>
                   {group.label}
                 </Link>
@@ -436,10 +438,10 @@ export function Topbar() {
                   onClick={() => setOpenGroup(isOpen ? null : group.label)}
                   className={cn('flex items-center gap-1 px-3 py-1.5 h-[52px] text-[12.5px] font-medium transition-colors whitespace-nowrap border-b-2',
                     isOpen
-                      ? 'text-white border-[#8b1a14] bg-white/[0.06]'
+                      ? 'text-white border-white bg-white/[0.12]'
                       : isGroupActive
-                        ? 'text-white border-[#8b1a14]/60 bg-transparent'
-                        : 'text-white/50 hover:text-white hover:bg-white/[0.05] border-transparent'
+                        ? 'text-white border-white/60 bg-transparent'
+                        : 'text-white/70 hover:text-white hover:bg-white/[0.10] border-transparent'
                   )}
                 >
                   {group.label}
@@ -449,7 +451,7 @@ export function Topbar() {
                 {/* Dropdown */}
                 {isOpen && (
                   <div
-                    className="absolute left-0 top-full mt-0 min-w-[230px] bg-[#220806] border border-white/[0.1] rounded-b-xl shadow-2xl z-50 py-1"
+                    className="absolute left-0 top-full mt-0 min-w-[230px] bg-white border border-gray-200 rounded-b-xl shadow-2xl z-50 py-1"
                     onMouseLeave={() => setOpenFlyout(null)}
                   >
                     {visibleItems.map((item, idx) => {
@@ -467,14 +469,14 @@ export function Topbar() {
                           <div key={item.label} className="relative"
                             onMouseEnter={() => setOpenFlyout(item.label)}
                           >
-                            {showDivider && <div className="my-1 border-t border-white/[0.06]" />}
+                            {showDivider && <div className="my-1 border-t border-gray-200" />}
                             <div className={cn(
                               'flex items-center gap-2.5 px-4 py-2 text-[12.5px] font-medium cursor-default select-none transition-colors',
                               flyoutOpen
-                                ? 'text-white bg-white/[0.08]'
+                                ? 'text-[#8b1a14] bg-[#8b1a14]/10'
                                 : anyChildActive
-                                  ? 'text-[#ffaa99] hover:bg-white/[0.08]'
-                                  : 'text-[hsl(220,20%,65%)] hover:text-white hover:bg-white/[0.08]'
+                                  ? 'text-[#8b1a14] hover:bg-[#8b1a14]/10'
+                                  : 'text-gray-700 hover:text-[#8b1a14] hover:bg-[#8b1a14]/10'
                             )}>
                               <Icon className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
                               <span className="flex-1">{item.label}</span>
@@ -483,7 +485,7 @@ export function Topbar() {
 
                             {/* Flyout panel */}
                             {flyoutOpen && (
-                              <div className="absolute left-full top-0 min-w-[220px] bg-[#220806] border border-white/[0.1] rounded-xl shadow-2xl z-50 py-1 ml-px">
+                              <div className="absolute left-full top-0 min-w-[220px] bg-white border border-gray-200 rounded-xl shadow-2xl z-50 py-1 ml-px">
                                 {visibleChildren.map(child => {
                                   const ChildIcon = child.icon
                                   const active = isActive(child.href)
@@ -492,7 +494,7 @@ export function Topbar() {
                                       className={cn('flex items-center gap-2.5 px-4 py-2 text-[12.5px] font-medium transition-colors',
                                         active
                                           ? 'bg-[#8b1a14] text-white'
-                                          : 'text-[hsl(220,20%,65%)] hover:text-white hover:bg-white/[0.08]'
+                                          : 'text-gray-700 hover:text-[#8b1a14] hover:bg-[#8b1a14]/10'
                                       )}>
                                       <ChildIcon className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
                                       {child.label}
@@ -508,12 +510,12 @@ export function Topbar() {
                       const active = item.href ? isActive(item.href) : false
                       return (
                         <div key={item.href}>
-                          {showDivider && <div className="my-1 border-t border-white/[0.06]" />}
+                          {showDivider && <div className="my-1 border-t border-gray-200" />}
                           <Link href={item.href!}
                             className={cn('flex items-center gap-2.5 px-4 py-2 text-[12.5px] font-medium transition-colors',
                               active
                                 ? 'bg-[#8b1a14] text-white'
-                                : 'text-[hsl(220,20%,65%)] hover:text-white hover:bg-white/[0.08]'
+                                : 'text-gray-700 hover:text-[#8b1a14] hover:bg-[#8b1a14]/10'
                             )}>
                             <Icon className="w-3.5 h-3.5 flex-shrink-0 opacity-70" />
                             {item.label}
@@ -532,7 +534,7 @@ export function Topbar() {
         <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
           {/* Theme toggle */}
           <button onClick={toggleTheme}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-[hsl(220,20%,55%)] hover:text-white hover:bg-white/[0.08] transition-colors">
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white hover:bg-white/[0.10] transition-colors">
             {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
@@ -543,7 +545,7 @@ export function Topbar() {
           <div ref={userRef} className="relative ml-1">
             <button onClick={() => setUserOpen(v => !v)}
               className="flex items-center gap-2 pl-2 ml-1 border-l border-white/[0.1] hover:opacity-80 transition-opacity">
-              <div className="w-7 h-7 rounded-full bg-[#8b1a14] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+              <div className="w-7 h-7 rounded-full bg-white/[0.18] border border-white/30 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
                 {initials}
               </div>
               <div className="hidden md:block text-left">
@@ -554,21 +556,21 @@ export function Topbar() {
             </button>
 
             {userOpen && (
-              <div className="absolute right-0 top-[calc(100%+8px)] w-[200px] bg-[#260908] border border-white/[0.08] rounded-xl shadow-2xl overflow-hidden z-50 py-1">
-                <div className="px-4 py-3 border-b border-white/[0.06]">
-                  <p className="text-[12px] font-semibold text-white truncate">{usuario?.nome}</p>
-                  <p className="text-[11px] text-white/30 truncate">{usuario?.email}</p>
+              <div className="absolute right-0 top-[calc(100%+8px)] w-[200px] bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden z-50 py-1">
+                <div className="px-4 py-3 border-b border-gray-200">
+                  <p className="text-[12px] font-semibold text-gray-900 truncate">{usuario?.nome}</p>
+                  <p className="text-[11px] text-gray-500 truncate">{usuario?.email}</p>
                 </div>
                 <button onClick={() => { setUserOpen(false); setShowSenha(true) }}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[12.5px] text-white/50 hover:bg-white/[0.06] hover:text-white transition-colors">
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[12.5px] text-gray-700 hover:bg-[#8b1a14]/10 hover:text-[#8b1a14] transition-colors">
                   <Lock className="w-4 h-4" /> Trocar Senha
                 </button>
                 <button onClick={() => { setUserOpen(false); abrirConta() }}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[12.5px] text-white/50 hover:bg-white/[0.06] hover:text-white transition-colors">
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[12.5px] text-gray-700 hover:bg-[#8b1a14]/10 hover:text-[#8b1a14] transition-colors">
                   <ArrowLeftRight className="w-4 h-4" /> Trocar Conta
                 </button>
                 <button onClick={() => { setUserOpen(false); signOut() }}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[12.5px] text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors">
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-[12.5px] text-red-600 hover:bg-red-500/10 hover:text-red-700 transition-colors">
                   <LogOut className="w-4 h-4" /> Sair
                 </button>
               </div>

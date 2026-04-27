@@ -52,12 +52,6 @@ export default function LoginPage() {
       <div className="hidden lg:flex flex-col w-[480px] flex-shrink-0 relative overflow-hidden"
         style={{ background: 'linear-gradient(160deg, #8b1a14 0%, #5a1110 60%, #2d0806 100%)' }}>
 
-        {/* Padrão geométrico de fundo */}
-        <div className="absolute inset-0 opacity-[0.07]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-          }} />
-
         {/* Círculo decorativo */}
         <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full opacity-10"
           style={{ background: 'radial-gradient(circle, #ff6b5b 0%, transparent 70%)' }} />
@@ -66,12 +60,12 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col h-full p-12">
 
-          {/* Logo */}
+          {/* Logo + nome */}
           <div className="flex items-center gap-4">
-            <img src="/logo.svg" alt="Grupo Pedra do Pombal" className="w-14 h-14 drop-shadow-lg" />
-            <div>
-              <p className="text-white/60 text-[11px] font-semibold tracking-[0.2em] uppercase">Grupo</p>
-              <p className="text-white text-[20px] font-extrabold leading-tight tracking-tight">Pedra do Pombal</p>
+            <img src="/logo.png" alt="Grupo Pedra do Pombal" className="w-20 h-20 drop-shadow-lg flex-shrink-0" />
+            <div className="leading-tight">
+              <p className="text-white/60 text-[12px] font-semibold tracking-[0.25em] uppercase">Grupo</p>
+              <p className="text-white text-[22px] font-extrabold leading-tight tracking-tight mt-0.5">Pedra do Pombal</p>
             </div>
           </div>
 
@@ -115,15 +109,15 @@ export default function LoginPage() {
       </div>
 
       {/* ── Painel direito — formulário ─────────────────── */}
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="flex-1 flex items-center justify-center p-6 bg-white">
         <div className="w-full max-w-[380px] animate-fade-up">
 
           {/* Logo mobile */}
           <div className="flex items-center gap-3 mb-10 lg:hidden">
-            <img src="/logo.svg" alt="Logo" className="w-10 h-10" />
+            <img src="/logo.png" alt="Logo" className="w-10 h-10" />
             <div>
-              <p className="text-white/50 text-[10px] tracking-widest uppercase">Grupo</p>
-              <p className="text-white font-extrabold text-[16px] leading-tight">Pedra do Pombal</p>
+              <p className="text-gray-400 text-[10px] tracking-widest uppercase font-semibold">Grupo</p>
+              <p className="text-gray-900 font-extrabold text-[16px] leading-tight">Pedra do Pombal</p>
             </div>
           </div>
 
@@ -131,15 +125,15 @@ export default function LoginPage() {
           {!resetMode && (
             <>
               <div className="mb-8">
-                <h1 className="text-[26px] font-black text-white leading-tight">Bem-vindo de volta</h1>
-                <p className="text-[13px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                <h1 className="text-[26px] font-black text-gray-900 leading-tight">Bem-vindo de volta</h1>
+                <p className="text-[13px] mt-1.5 text-gray-500">
                   Insira suas credenciais para acessar o painel
                 </p>
               </div>
 
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-[12px] font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  <Label htmlFor="email" className="text-[12px] font-semibold text-gray-700">
                     Email
                   </Label>
                   <Input
@@ -148,8 +142,7 @@ export default function LoginPage() {
                     placeholder="seu@email.com"
                     value={form.email}
                     onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                    className="h-11 text-[13px] text-white placeholder:text-white/20"
-                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    className="h-11 text-[13px] text-gray-900 placeholder:text-gray-400 bg-white border-gray-300 focus-visible:ring-[#8b1a14]/30 focus-visible:border-[#8b1a14]"
                     required
                     autoComplete="email"
                     autoFocus
@@ -157,7 +150,7 @@ export default function LoginPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="password" className="text-[12px] font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  <Label htmlFor="password" className="text-[12px] font-semibold text-gray-700">
                     Senha
                   </Label>
                   <div className="relative">
@@ -167,14 +160,12 @@ export default function LoginPage() {
                       placeholder="••••••••"
                       value={form.password}
                       onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                      className="h-11 pr-10 text-[13px] text-white placeholder:text-white/20"
-                      style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+                      className="h-11 pr-10 text-[13px] text-gray-900 placeholder:text-gray-400 bg-white border-gray-300 focus-visible:ring-[#8b1a14]/30 focus-visible:border-[#8b1a14]"
                       required
                       autoComplete="current-password"
                     />
                     <button type="button" tabIndex={-1} onClick={() => setShowPass(p => !p)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
-                      style={{ color: 'rgba(255,255,255,0.25)' }}>
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                       {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
@@ -182,15 +173,14 @@ export default function LoginPage() {
 
                 <div className="text-right">
                   <button type="button" onClick={() => setResetMode(true)}
-                    className="text-[12px] transition-colors"
-                    style={{ color: 'rgba(255,180,170,0.6)' }}>
+                    className="text-[12px] font-medium text-[#8b1a14] hover:text-[#6e1410] transition-colors">
                     Esqueceu a senha?
                   </button>
                 </div>
 
                 <Button type="submit"
-                  className="w-full h-11 font-bold text-[14px] text-white shadow-lg mt-1 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                  style={{ background: 'linear-gradient(135deg, #a82520 0%, #8b1a14 100%)', boxShadow: '0 4px 24px rgba(139,26,20,0.4)' }}
+                  className="w-full h-11 font-bold text-[14px] text-white mt-1 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  style={{ background: 'linear-gradient(135deg, #a82520 0%, #8b1a14 100%)' }}
                   disabled={loading}>
                   {loading
                     ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Entrando...</>
@@ -205,8 +195,7 @@ export default function LoginPage() {
           {resetMode && (
             <>
               <button onClick={() => { setResetMode(false); setResetSent(false) }}
-                className="flex items-center gap-1.5 text-[12px] mb-8 transition-colors"
-                style={{ color: 'rgba(255,255,255,0.4)' }}>
+                className="flex items-center gap-1.5 text-[12px] mb-8 text-gray-500 hover:text-gray-900 transition-colors">
                 <ArrowLeft className="w-3.5 h-3.5" />
                 Voltar ao login
               </button>
@@ -214,20 +203,19 @@ export default function LoginPage() {
               {!resetSent ? (
                 <>
                   <div className="mb-8">
-                    <h1 className="text-[24px] font-black text-white">Redefinir senha</h1>
-                    <p className="text-[13px] mt-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    <h1 className="text-[24px] font-black text-gray-900">Redefinir senha</h1>
+                    <p className="text-[13px] mt-1.5 text-gray-500">
                       Enviaremos um link para redefinir sua senha.
                     </p>
                   </div>
                   <form onSubmit={handleResetPassword} className="space-y-4">
                     <div className="space-y-1.5">
-                      <Label htmlFor="reset-email" className="text-[12px] font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      <Label htmlFor="reset-email" className="text-[12px] font-semibold text-gray-700">
                         Email
                       </Label>
                       <Input id="reset-email" type="email" placeholder="seu@email.com"
                         value={resetEmail} onChange={e => setResetEmail(e.target.value)}
-                        className="h-11 text-[13px] text-white placeholder:text-white/20"
-                        style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+                        className="h-11 text-[13px] text-gray-900 placeholder:text-gray-400 bg-white border-gray-300 focus-visible:ring-[#8b1a14]/30 focus-visible:border-[#8b1a14]"
                         required autoFocus />
                     </div>
                     <Button type="submit"
@@ -243,19 +231,18 @@ export default function LoginPage() {
                 </>
               ) : (
                 <div className="text-center space-y-5">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto"
-                    style={{ background: 'rgba(139,26,20,0.2)', border: '1px solid rgba(139,26,20,0.4)' }}>
-                    <MailCheck className="w-8 h-8" style={{ color: '#ff9a8f' }} />
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto bg-[#8b1a14]/10 border border-[#8b1a14]/30">
+                    <MailCheck className="w-8 h-8 text-[#8b1a14]" />
                   </div>
                   <div>
-                    <h1 className="text-[22px] font-black text-white">Email enviado!</h1>
-                    <p className="text-[13px] mt-2 leading-relaxed" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    <h1 className="text-[22px] font-black text-gray-900">Email enviado!</h1>
+                    <p className="text-[13px] mt-2 leading-relaxed text-gray-500">
                       Verifique sua caixa de entrada em{' '}
-                      <span className="text-white/70 font-medium">{resetEmail}</span>
+                      <span className="text-gray-900 font-medium">{resetEmail}</span>
                     </p>
                   </div>
                   <button onClick={() => { setResetMode(false); setResetSent(false) }}
-                    className="text-[12px] transition-colors" style={{ color: 'rgba(255,170,160,0.7)' }}>
+                    className="text-[12px] font-medium text-[#8b1a14] hover:text-[#6e1410] transition-colors">
                     Voltar ao login
                   </button>
                 </div>

@@ -37,9 +37,12 @@ interface GrupoProdutoRow {
   nome:   string
 }
 
+type TipoValor = 'venda' | 'custo'
+
 interface MapeamentoGrupo {
   linha_id:   string
   grupo_grid: string
+  tipo_valor: TipoValor
 }
 
 type Origem = 'contas' | 'grupos'
@@ -113,6 +116,10 @@ export function MapeamentosPanel({ mascaraId, linhas }: Props) {
   // ── Origem ativa (Plano de Contas / Grupos de Produtos) ────
   const [origem, setOrigem]                   = useState<Origem>('contas')
 
+  // Quando origem = 'grupos', define se estamos mapeando vendas ou custos.
+  // O mesmo grupo pode ser mapeado a uma linha como venda E a outra linha como custo.
+  const [tipoValor, setTipoValor]             = useState<TipoValor>('venda')
+
   // ── Grupos de produtos (vendas/custos) ─────────────────────
   const [grupos, setGrupos]                       = useState<GrupoProdutoRow[] | null>(null)
   const [loadingGrupos, setLoadingGrupos]         = useState(true)
@@ -137,13 +144,21 @@ export function MapeamentosPanel({ mascaraId, linhas }: Props) {
     return m
   }, [mapeamentos])
 
+  // Mapeamentos de grupos do tipo_valor ATIVO (filtrados por venda/custo).
+  // O mesmo grupo pode estar mapeado a duas linhas distintas — uma para vendas
+  // e outra para custos — então só consideramos o tipo ativo na visualização.
+  const mapeamentosGruposAtivos = useMemo(
+    () => mapeamentosGrupos.filter(m => m.tipo_valor === tipoValor),
+    [mapeamentosGrupos, tipoValor]
+  )
+
   const linhaIdByGrupoGrid = useMemo(() => {
     const m = new Map<string, string>()
-    mapeamentosGrupos.forEach(map => m.set(map.grupo_grid, map.linha_id))
+    mapeamentosGruposAtivos.forEach(map => m.set(map.grupo_grid, map.linha_id))
     return m
-  }, [mapeamentosGrupos])
+  }, [mapeamentosGruposAtivos])
 
-  // Contagem combinada (contas + grupos) por linha — info discreta na lista
+  // Contagem combinada (contas + grupos de AMBOS os tipos) por linha — info discreta na lista
   const totalCountByLinhaId = useMemo(() => {
     const m = new Map<string, number>()
     mapeamentos.forEach(map => m.set(map.linha_id, (m.get(map.linha_id) ?? 0) + 1))
@@ -271,15 +286,19 @@ export function MapeamentosPanel({ mascaraId, linhas }: Props) {
     setLoadingMapsGrupos(true)
     const { data, error } = await supabase
       .from('mascaras_mapeamentos_grupos')
-      .select('linha_id, grupo_grid')
+      .select('linha_id, grupo_grid, tipo_valor')
       .eq('mascara_id', mascaraId)
     if (error) {
       toast({ variant: 'destructive', title: 'Erro ao carregar mapeamentos de grupos', description: error.message })
       setLoadingMapsGrupos(false)
       return
     }
-    const rows = (data ?? []) as Array<{ linha_id: string; grupo_grid: string | number }>
-    setMapeamentosGrupos(rows.map(r => ({ linha_id: r.linha_id, grupo_grid: String(r.grupo_grid) })))
+    const rows = (data ?? []) as Array<{ linha_id: string; grupo_grid: string | number; tipo_valor: TipoValor }>
+    setMapeamentosGrupos(rows.map(r => ({
+      linha_id:   r.linha_id,
+      grupo_grid: String(r.grupo_grid),
+      tipo_valor: r.tipo_valor,
+    })))
     setLoadingMapsGrupos(false)
   }
 
@@ -311,6 +330,16 @@ export function MapeamentosPanel({ mascaraId, linhas }: Props) {
     }
     setOrigem(novaOrigem)
     setPending(new Map())
+    setPendingGrupos(new Map())
+  }
+
+  function switchTipoValor(novo: TipoValor) {
+    if (novo === tipoValor) return
+    if (pendingGrupos.size > 0) {
+      const ok = window.confirm('Há alterações não salvas. Descartar?')
+      if (!ok) return
+    }
+    setTipoValor(novo)
     setPendingGrupos(new Map())
   }
 
@@ -430,11 +459,13 @@ export function MapeamentosPanel({ mascaraId, linhas }: Props) {
       else                    toRemove.push(grid)
     })
 
+    // Operações sempre filtradas por tipo_valor — vendas e custos são independentes.
     if (toAdd.length > 0) {
       const { error: e1 } = await supabase
         .from('mascaras_mapeamentos_grupos')
         .delete()
         .eq('mascara_id', mascaraId)
+        .eq('tipo_valor', tipoValor)
         .in('grupo_grid', toAdd)
       if (e1) {
         toast({ variant: 'destructive', title: 'Erro ao salvar', description: e1.message })
@@ -442,7 +473,12 @@ export function MapeamentosPanel({ mascaraId, linhas }: Props) {
       }
       const { error: e2 } = await supabase
         .from('mascaras_mapeamentos_grupos')
-        .insert(toAdd.map(g => ({ mascara_id: mascaraId, linha_id: selectedLinhaId, grupo_grid: g })))
+        .insert(toAdd.map(g => ({
+          mascara_id: mascaraId,
+          linha_id:   selectedLinhaId,
+          grupo_grid: g,
+          tipo_valor: tipoValor,
+        })))
       if (e2) {
         toast({ variant: 'destructive', title: 'Erro ao salvar', description: e2.message })
         setSaving(false); return
@@ -454,6 +490,7 @@ export function MapeamentosPanel({ mascaraId, linhas }: Props) {
         .from('mascaras_mapeamentos_grupos')
         .delete()
         .eq('mascara_id', mascaraId)
+        .eq('tipo_valor', tipoValor)
         .in('grupo_grid', toRemove)
       if (error) {
         toast({ variant: 'destructive', title: 'Erro ao salvar', description: error.message })
@@ -609,11 +646,33 @@ export function MapeamentosPanel({ mascaraId, linhas }: Props) {
             </h2>
             <p className="text-[11px] text-gray-400 dark:text-gray-500">
               {selectedLinhaId
-                ? <>Vinculando {origem === 'contas' ? 'contas' : 'grupos'} a <strong className="text-gray-900 dark:text-gray-100">{linhaNomeById.get(selectedLinhaId)}</strong></>
+                ? <>Vinculando <strong className="text-gray-900 dark:text-gray-100">{
+                    origem === 'contas' ? 'contas' : tipoValor === 'venda' ? 'vendas' : 'custos'
+                  }</strong> a <strong className="text-gray-900 dark:text-gray-100">{linhaNomeById.get(selectedLinhaId)}</strong></>
                 : 'Selecione uma linha à esquerda'}
             </p>
           </div>
-          <div className="relative w-56">
+          {origem === 'grupos' && (
+            <div className="flex border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden flex-shrink-0">
+              {(['venda', 'custo'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => switchTipoValor(t)}
+                  className={cn(
+                    'h-9 px-3 text-[12px] font-medium transition-colors',
+                    tipoValor === t
+                      ? t === 'venda'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-rose-600 text-white'
+                      : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                  )}
+                >
+                  {t === 'venda' ? 'Vendas' : 'Custos'}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="relative w-44">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
             <input
               type="text"

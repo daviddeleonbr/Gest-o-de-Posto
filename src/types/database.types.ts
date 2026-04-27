@@ -328,11 +328,14 @@ export interface MascaraMapeamento {
   criado_em: string
 }
 
+export type TipoValorGrupo = 'venda' | 'custo'
+
 export interface MascaraMapeamentoGrupo {
   id: string
   mascara_id: string
   linha_id: string
   grupo_grid: string
+  tipo_valor: TipoValorGrupo
   criado_em: string
 }
 

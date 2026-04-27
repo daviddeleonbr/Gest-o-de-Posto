@@ -1,24 +1,50 @@
 import { Pool, PoolClient } from 'pg'
 
-let pool: Pool | null = null
+// Cache do pool em globalThis para sobreviver a hot-reloads do Next.js em dev.
+// Sem isso, cada reload cria um novo pool e os antigos ficam segurando conexões
+// até serem coletadas pelo GC, eventualmente esgotando os slots do servidor.
+declare global {
+  // eslint-disable-next-line no-var
+  var __autosystemPool: Pool | undefined
+}
 
 function getPool(): Pool {
-  if (!pool) {
-    pool = new Pool({
+  if (!global.__autosystemPool) {
+    const pool = new Pool({
       host:     process.env.EXT_DB_HOST     ?? '192.168.2.200',
       port:     Number(process.env.EXT_DB_PORT ?? 5432),
       database: process.env.EXT_DB_NAME     ?? 'matriz',
       user:     process.env.EXT_DB_USER     ?? 'app_readonly',
       password: process.env.EXT_DB_PASSWORD ?? '',
-      max: 10,
-      idleTimeoutMillis: 30000,
+      max: 3,
+      idleTimeoutMillis: 10000,
       connectionTimeoutMillis: 10000,
     })
+    // O banco do AUTOSYSTEM tem dados gravados em WIN1252 mesmo quando server_encoding
+    // diz UTF-8 — isso causa "invalid byte sequence" se pedirmos UTF-8 ao servidor.
+    // Mantemos client_encoding=WIN1252 (passa bytes crus) e fazemos cast para bytea
+    // nas colunas com texto acentuado, decodificando no JS via Buffer.toString('latin1').
     pool.on('connect', (client: PoolClient) => {
       client.query("SET client_encoding = 'WIN1252'")
     })
+    // Sem este handler, um erro idle no pg pode virar unhandled rejection
+    pool.on('error', (err) => {
+      console.error('[autosystem pool] erro idle:', err.message)
+    })
+    global.__autosystemPool = pool
   }
-  return pool
+  return global.__autosystemPool
+}
+
+// Decodifica bytea (Buffer) que vem do AUTOSYSTEM como bytes WIN1252.
+// node-pg decodifica strings como UTF-8 por default e isso garbla acentos
+// quando o banco tem WIN1252. Usar `col::bytea` no SQL e decodificar aqui
+// (`latin1` compartilha a mesma codepage com WIN1252 para 0xC0-0xFF, suficiente
+// para acentos do PT-BR). Para chars Windows-específicos em 0x80-0x9F seria
+// preciso uma tabela de tradução, mas nomes de fornecedores raramente os têm.
+function decodeBytea(b: Buffer | null | undefined): string {
+  if (!b) return ''
+  return b.toString('latin1')
 }
 
 async function query<T extends Record<string, unknown> = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
@@ -225,14 +251,25 @@ export interface PlanoContaRow extends Record<string, unknown> {
 }
 
 export async function buscarPlanoContas(): Promise<PlanoContaRow[]> {
-  return query<PlanoContaRow>(
+  const rows = await query<{
+    hierarquia: string
+    nome_b:     Buffer | null
+    grid:       string
+    natureza:   'Débito' | 'Crédito'
+  }>(
     `SELECT codigo::text   AS hierarquia,
-            nome::text     AS nome,
+            nome::bytea    AS nome_b,
             grid::bigint   AS grid,
             CASE WHEN credor = false THEN 'Débito' ELSE 'Crédito' END AS natureza
      FROM conta
      ORDER BY codigo`,
   )
+  return rows.map(r => ({
+    hierarquia: r.hierarquia,
+    nome:       decodeBytea(r.nome_b),
+    grid:       String(r.grid),
+    natureza:   r.natureza,
+  }))
 }
 
 // Grupos de produtos — usado para mapeamento de vendas/custos nas máscaras
@@ -244,13 +281,310 @@ export interface GrupoProdutoRow extends Record<string, unknown> {
 }
 
 export async function buscarGruposProduto(): Promise<GrupoProdutoRow[]> {
-  return query<GrupoProdutoRow>(
+  const rows = await query<{ id: string; codigo: number; nome_b: Buffer | null }>(
     `SELECT grid::bigint AS id,
             codigo::int  AS codigo,
-            nome::text   AS nome
+            nome::bytea  AS nome_b
      FROM grupo_produto
      ORDER BY codigo`,
   )
+  return rows.map(r => ({
+    id:     String(r.id),
+    codigo: r.codigo,
+    nome:   decodeBytea(r.nome_b),
+  }))
+}
+
+// Detalhes das contas pelos grids (usado no relatório de DRE)
+export interface ContaDetalhe extends Record<string, unknown> {
+  grid:     string
+  codigo:   string
+  nome:     string
+  natureza: 'Débito' | 'Crédito'
+}
+
+export async function buscarContasPorGrid(grids: string[]): Promise<ContaDetalhe[]> {
+  if (!grids.length) return []
+  const rows = await query<{
+    grid:     string
+    codigo:   string
+    nome_b:   Buffer | null
+    natureza: 'Débito' | 'Crédito'
+  }>(
+    `SELECT grid::bigint   AS grid,
+            codigo::text   AS codigo,
+            nome::bytea    AS nome_b,
+            CASE WHEN credor = false THEN 'Débito' ELSE 'Crédito' END AS natureza
+     FROM conta
+     WHERE grid = ANY($1::bigint[])`,
+    [grids],
+  )
+  return rows.map(r => ({
+    grid:     String(r.grid),
+    codigo:   r.codigo,
+    nome:     decodeBytea(r.nome_b),
+    natureza: r.natureza,
+  }))
+}
+
+// Agrega movto por (conta, mês) no período — soma debitar e creditar separadamente.
+// Para DRE: balance da conta = total_creditar - total_debitar
+//   - Receitas (credit nature)  → positivo quando há receita
+//   - Despesas (debit nature)   → negativo quando há gasto
+// Sinal natural permite somar tudo direto no DRE.
+export interface MovtoAgregadoContaMes extends Record<string, unknown> {
+  codigo:         string
+  mes:            string  // 'YYYY-MM'
+  total_debitar:  number
+  total_creditar: number
+}
+
+export async function aggregarMovtoPorContaPorMes(
+  empresaIds: number[],
+  dataIni:    string,
+  dataFim:    string,
+  contaCodigos: string[],
+): Promise<MovtoAgregadoContaMes[]> {
+  if (!empresaIds.length || !contaCodigos.length) return []
+  return query<MovtoAgregadoContaMes>(
+    `SELECT codigo::text                                          AS codigo,
+            to_char(data, 'YYYY-MM')                              AS mes,
+            COALESCE(SUM(CASE WHEN dir = 'D' THEN valor END), 0)::float AS total_debitar,
+            COALESCE(SUM(CASE WHEN dir = 'C' THEN valor END), 0)::float AS total_creditar
+     FROM (
+       SELECT conta_debitar  AS codigo, 'D' AS dir, valor, data
+       FROM movto
+       WHERE empresa = ANY($1::bigint[])
+         AND data BETWEEN $2::date AND $3::date
+         AND conta_debitar = ANY($4::text[])
+       UNION ALL
+       SELECT conta_creditar AS codigo, 'C' AS dir, valor, data
+       FROM movto
+       WHERE empresa = ANY($1::bigint[])
+         AND data BETWEEN $2::date AND $3::date
+         AND conta_creditar = ANY($4::text[])
+     ) t
+     GROUP BY codigo, to_char(data, 'YYYY-MM')`,
+    [empresaIds, dataIni, dataFim, contaCodigos],
+  )
+}
+
+// Agrega vendas e custos por (grupo de produto, mês). valor_custo vem com sinal natural.
+export interface VendasCustosGrupoMes extends Record<string, unknown> {
+  grupo_grid:  string
+  mes:         string
+  total_venda: number
+  total_custo: number
+}
+
+export async function aggregarVendasCustosPorGrupoPorMes(
+  empresaIds: number[],
+  dataIni:    string,
+  dataFim:    string,
+  grupoGrids: string[],
+): Promise<VendasCustosGrupoMes[]> {
+  if (!empresaIds.length || !grupoGrids.length) return []
+  return query<VendasCustosGrupoMes>(
+    `SELECT
+       p.grupo::bigint                          AS grupo_grid,
+       to_char(l.data, 'YYYY-MM')               AS mes,
+       COALESCE(SUM(l.valor), 0)::float          AS total_venda,
+       COALESCE(SUM(
+         CASE WHEN pc.produto IS NOT NULL THEN -ev.ult_custo_medio * l.quantidade
+              ELSE el.custo_medio * el.movimento
+         END
+       ), 0)::float                              AS total_custo
+     FROM lancto l
+       LEFT JOIN estoque_lancto el ON el.lancto = l.grid
+       LEFT JOIN produto p         ON l.produto = p.grid
+       JOIN estoque_valor ev       ON l.empresa = ev.empresa
+                                  AND l.data    = ev.data
+                                  AND l.produto = ev.produto
+       LEFT JOIN (SELECT DISTINCT produto FROM produto_composicao) pc
+                                   ON pc.produto = l.produto
+     WHERE l.data BETWEEN $1::date AND $2::date
+       AND l.operacao = 'V'
+       AND l.empresa = ANY($3::bigint[])
+       AND p.grupo   = ANY($4::bigint[])
+     GROUP BY p.grupo, to_char(l.data, 'YYYY-MM')`,
+    [dataIni, dataFim, empresaIds, grupoGrids],
+  )
+}
+
+// Lista lançamentos individuais de uma conta no período (drill-down).
+// Retorna `data` (YYYY-MM-DD) para bucketing por mês + `observacao` já
+// formatada como "DD/MM/YYYY · DOCUMENTO · OBSERVAÇÃO" + valor.
+export interface MovtoLancamento extends Record<string, unknown> {
+  data:       string
+  observacao: string | null
+  valor:      number
+}
+
+// Helper: descobre quais colunas existem em uma tabela do AUTOSYSTEM.
+// Usado para construir queries resilientes quando o schema varia entre instâncias.
+async function colunasExistentes(tabela: string, candidatas: string[]): Promise<Set<string>> {
+  if (!candidatas.length) return new Set()
+  const rows = await query<{ column_name: string }>(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = $1 AND column_name = ANY($2::text[])`,
+    [tabela, candidatas],
+  )
+  return new Set(rows.map(r => r.column_name))
+}
+
+export async function listarMovtoConta(
+  empresaIds: number[],
+  dataIni:    string,
+  dataFim:    string,
+  codigo:     string,
+  limit = 500,
+): Promise<MovtoLancamento[]> {
+  if (!empresaIds.length) return []
+
+  // Detecta colunas opcionais que variam entre versões do AUTOSYSTEM
+  const cols = await colunasExistentes('movto', [
+    'documento', 'observacao', 'obs', 'historico', 'pessoa', 'cliente',
+  ])
+  const obsCol      = cols.has('observacao') ? 'observacao'
+                    : cols.has('obs')         ? 'obs'
+                    : cols.has('historico')   ? 'historico'
+                    : null
+  const docCol      = cols.has('documento') ? 'documento' : null
+  const pessoaFkCol = cols.has('pessoa')    ? 'pessoa'
+                    : cols.has('cliente')   ? 'cliente'
+                    : null
+
+  const selectExtras: string[] = []
+  if (docCol)      selectExtras.push(`m.${docCol}::bytea AS doc_b`)
+  if (pessoaFkCol) selectExtras.push(`p.nome::bytea       AS pessoa_b`)
+  if (obsCol)      selectExtras.push(`m.${obsCol}::bytea  AS obs_b`)
+  const selectExtra = selectExtras.length ? `, ${selectExtras.join(', ')}` : ''
+
+  const joinPessoa = pessoaFkCol ? `LEFT JOIN pessoa p ON p.grid = m.${pessoaFkCol}` : ''
+
+  const rows = await query<{
+    data:     string
+    valor:    number
+    doc_b?:    Buffer | null
+    pessoa_b?: Buffer | null
+    obs_b?:    Buffer | null
+  }>(
+    `SELECT to_char(m.data, 'YYYY-MM-DD') AS data,
+            CASE WHEN m.conta_creditar = $4 THEN m.valor::float ELSE -m.valor::float END AS valor
+            ${selectExtra}
+     FROM movto m
+     ${joinPessoa}
+     WHERE m.empresa = ANY($1::bigint[])
+       AND m.data BETWEEN $2::date AND $3::date
+       AND (m.conta_debitar::text = $4 OR m.conta_creditar::text = $4)
+     ORDER BY m.data DESC, m.grid DESC
+     LIMIT $5`,
+    [empresaIds, dataIni, dataFim, codigo, limit],
+  )
+
+  return rows.map(r => {
+    const [y, mo, d] = r.data.split('-')
+    const partes: string[] = [`${d}/${mo}/${y}`]
+    const doc    = decodeBytea(r.doc_b).trim()
+    const pessoa = decodeBytea(r.pessoa_b).trim()
+    const obs    = decodeBytea(r.obs_b).trim()
+    if (doc)    partes.push(doc)
+    if (pessoa) partes.push(pessoa)
+    if (obs)    partes.push(obs)
+    return {
+      data:       r.data,
+      observacao: partes.join(' · '),
+      valor:      Number(r.valor),
+    }
+  })
+}
+
+// Lista lançamentos de venda de um grupo de produto no período (drill-down)
+export interface LanctoGrupoLancamento extends Record<string, unknown> {
+  data:       string
+  observacao: string | null
+  valor:      number
+}
+
+export async function listarLanctoGrupo(
+  empresaIds: number[],
+  dataIni:    string,
+  dataFim:    string,
+  grupoGrid:  string,
+  tipo:       'venda' | 'custo',
+  limit = 500,
+): Promise<LanctoGrupoLancamento[]> {
+  if (!empresaIds.length) return []
+
+  const cols = await colunasExistentes('lancto', [
+    'documento', 'observacao', 'obs', 'historico', 'pessoa', 'cliente',
+  ])
+  const obsCol      = cols.has('observacao') ? 'observacao'
+                    : cols.has('obs')         ? 'obs'
+                    : cols.has('historico')   ? 'historico'
+                    : null
+  const docCol      = cols.has('documento') ? 'documento' : null
+  const pessoaFkCol = cols.has('pessoa')    ? 'pessoa'
+                    : cols.has('cliente')   ? 'cliente'
+                    : null
+
+  const selectExtras: string[] = []
+  if (docCol)      selectExtras.push(`l.${docCol}::bytea AS doc_b`)
+  if (pessoaFkCol) selectExtras.push(`pe.nome::bytea       AS pessoa_b`)
+  if (obsCol)      selectExtras.push(`l.${obsCol}::bytea  AS obs_b`)
+  const selectExtra = selectExtras.length ? `, ${selectExtras.join(', ')}` : ''
+
+  const joinPessoa = pessoaFkCol ? `LEFT JOIN pessoa pe ON pe.grid = l.${pessoaFkCol}` : ''
+
+  const valorExpr = tipo === 'venda'
+    ? 'l.valor::float'
+    : `(CASE WHEN pc.produto IS NOT NULL THEN -ev.ult_custo_medio * l.quantidade
+            ELSE el.custo_medio * el.movimento
+       END)::float`
+
+  const rows = await query<{
+    data:     string
+    valor:    number
+    doc_b?:    Buffer | null
+    pessoa_b?: Buffer | null
+    obs_b?:    Buffer | null
+  }>(
+    `SELECT to_char(l.data, 'YYYY-MM-DD')  AS data,
+            ${valorExpr}                   AS valor
+            ${selectExtra}
+     FROM lancto l
+       LEFT JOIN estoque_lancto el ON el.lancto = l.grid
+       LEFT JOIN produto p         ON l.produto = p.grid
+       JOIN estoque_valor ev       ON l.empresa = ev.empresa
+                                  AND l.data    = ev.data
+                                  AND l.produto = ev.produto
+       LEFT JOIN (SELECT DISTINCT produto FROM produto_composicao) pc
+                                   ON pc.produto = l.produto
+       ${joinPessoa}
+     WHERE l.data BETWEEN $1::date AND $2::date
+       AND l.operacao = 'V'
+       AND l.empresa = ANY($3::bigint[])
+       AND p.grupo   = $4::bigint
+     ORDER BY l.data DESC, l.grid DESC
+     LIMIT $5`,
+    [dataIni, dataFim, empresaIds, grupoGrid, limit],
+  )
+
+  return rows.map(r => {
+    const [y, mo, d] = r.data.split('-')
+    const partes: string[] = [`${d}/${mo}/${y}`]
+    const doc    = decodeBytea(r.doc_b).trim()
+    const pessoa = decodeBytea(r.pessoa_b).trim()
+    const obs    = decodeBytea(r.obs_b).trim()
+    if (doc)    partes.push(doc)
+    if (pessoa) partes.push(pessoa)
+    if (obs)    partes.push(obs)
+    return {
+      data:       r.data,
+      observacao: partes.join(' · '),
+      valor:      Number(r.valor),
+    }
+  })
 }
 
 // ── pessoa ───────────────────────────────────────────────────────────────────

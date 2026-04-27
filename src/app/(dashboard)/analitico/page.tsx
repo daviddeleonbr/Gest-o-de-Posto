@@ -11,8 +11,9 @@ import { cn } from '@/lib/utils/cn'
 import {
   Smartphone, TrendingUp, AlertCircle, Wrench,
   DollarSign, BarChart2, Percent, Package,
-  TrendingDown, Search, Loader2, AlertTriangle, CheckCircle2,
+  TrendingDown, Search, Loader2, AlertTriangle, CheckCircle2, FileBarChart,
 } from 'lucide-react'
+import { RelatoriosGerenciaisTab } from '@/components/analitico/RelatoriosGerenciaisTab'
 import {
   ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -407,7 +408,7 @@ export default function AnaliticoPage() {
   const [maqRows, setMaqRows] = useState<MaqRow[]>([])
   const [taxRows, setTaxRows] = useState<TaxaRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [tabAtiva, setTabAtiva] = useState<'maquininhas' | 'alugueis' | 'taxas' | 'dre'>('dre')
+  const [tabAtiva, setTabAtiva] = useState<'maquininhas' | 'alugueis' | 'taxas' | 'dre' | 'relatorios'>('dre')
 
   useEffect(() => {
     async function load() {
@@ -480,10 +481,11 @@ export default function AnaliticoPage() {
   const mediaParc = taxRows.filter(r => r.taxa_credito_parcelado !== null).reduce((s, r) => s + (r.taxa_credito_parcelado ?? 0), 0) / (taxRows.filter(r => r.taxa_credito_parcelado !== null).length || 1)
 
   const TABS = [
-    { id: 'dre',         label: 'Análise de Taxa',  icon: BarChart2  },
-    { id: 'maquininhas', label: 'Gráficos',      icon: BarChart2  },
-    { id: 'alugueis',    label: 'Aluguéis',      icon: DollarSign },
-    { id: 'taxas',       label: 'Taxas',          icon: Percent    },
+    { id: 'dre',         label: 'Análise de Taxa',     icon: BarChart2    },
+    { id: 'relatorios',  label: 'Relatórios Gerenciais', icon: FileBarChart },
+    { id: 'maquininhas', label: 'Gráficos',            icon: BarChart2    },
+    { id: 'alugueis',    label: 'Aluguéis',            icon: DollarSign   },
+    { id: 'taxas',       label: 'Taxas',               icon: Percent      },
   ] as const
 
   const tickStyle = { fontSize: 11, fill: '#94a3b8' }
@@ -507,6 +509,9 @@ export default function AnaliticoPage() {
 
         {/* ── DRE ── */}
         {tabAtiva === 'dre' && <DreTab />}
+
+        {/* ── RELATÓRIOS GERENCIAIS ── */}
+        {tabAtiva === 'relatorios' && <RelatoriosGerenciaisTab />}
 
         {/* ── MAQUININHAS ── */}
         {tabAtiva === 'maquininhas' && (
