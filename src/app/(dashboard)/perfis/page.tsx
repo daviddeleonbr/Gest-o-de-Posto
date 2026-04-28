@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { toast } from '@/hooks/use-toast'
 import { useAuthContext } from '@/contexts/AuthContext'
-import { PERMISSIONS, ROLE_LABELS, ROLE_COLORS } from '@/lib/utils/permissions'
+import { PERMISSIONS, ROLE_LABELS, ROLE_COLORS, getRoleLabel } from '@/lib/utils/permissions'
 import { cn } from '@/lib/utils/cn'
 import {
   Plus, Pencil, Trash2, Loader2, ShieldCheck, Users, CheckCircle2,
@@ -22,14 +22,15 @@ import type { PerfilPermissoes, Role } from '@/types/database.types'
 
 // ─── Cargos fixos ─────────────────────────────────────────────────────────────
 const ROLES_SISTEMA: { role: Role; cor: string }[] = [
-  { role: 'master',      cor: 'bg-purple-100 text-purple-700 border-purple-200' },
-  { role: 'admin',       cor: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { role: 'operador',    cor: 'bg-green-100 text-green-700 border-green-200' },
-  { role: 'conciliador', cor: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
-  { role: 'fechador',    cor: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { role: 'marketing',    cor: 'bg-pink-100 text-pink-700 border-pink-200' },
-  { role: 'gerente',      cor: 'bg-teal-100 text-teal-700 border-teal-200' },
-  { role: 'transpombal',  cor: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  { role: 'master',               cor: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { role: 'adm_financeiro',       cor: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { role: 'adm_fiscal',           cor: 'bg-indigo-100 text-indigo-700 border-indigo-200' },
+  { role: 'adm_marketing',        cor: 'bg-pink-100 text-pink-700 border-pink-200' },
+  { role: 'adm_transpombal',      cor: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  { role: 'adm_contas_pagar',     cor: 'bg-orange-100 text-orange-700 border-orange-200' },
+  { role: 'operador_caixa',       cor: 'bg-green-100 text-green-700 border-green-200' },
+  { role: 'operador_conciliador', cor: 'bg-cyan-100 text-cyan-700 border-cyan-200' },
+  { role: 'gerente',              cor: 'bg-teal-100 text-teal-700 border-teal-200' },
 ]
 
 // ─── Grupos de permissões completos ───────────────────────────────────────────
@@ -453,7 +454,7 @@ export default function PerfisPage() {
     )
   }
 
-  const roles: Role[] = ['master', 'admin', 'operador', 'conciliador', 'fechador', 'marketing', 'gerente']
+  const roles: Role[] = ['master', 'adm_financeiro', 'adm_fiscal', 'adm_marketing', 'adm_transpombal', 'adm_contas_pagar', 'operador_caixa', 'operador_conciliador', 'gerente']
 
   return (
     <div className="animate-fade-in">
@@ -485,7 +486,7 @@ export default function PerfisPage() {
                 <div key={role} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
                   <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-50">
                     <span className={cn('text-[11px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wide border', cor)}>
-                      {ROLE_LABELS[role]}
+                      {getRoleLabel(role)}
                     </span>
                     {customizado
                       ? <span className="text-[10px] font-semibold bg-amber-100 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">Personalizado</span>

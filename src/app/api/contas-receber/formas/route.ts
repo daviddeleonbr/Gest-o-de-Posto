@@ -65,9 +65,9 @@ export async function GET(req: NextRequest) {
     // Usa vencto para agrupar por mês de competência; fallback em data se vencto ausente
     const mesBase     = (m.vencto as string | null) ?? (m.data as string | null) ?? ''
     const mes         = mesBase.slice(0, 7)
-    // child = null ou -1 → A Receber; child >= 0 → Recebido (confirmado)
+    // child = 0 → A Receber; child ≠ 0 → Baixado
     const childVal    = m.child as number | null
-    const pago        = childVal !== null && childVal >= 0
+    const pago        = childVal !== null && childVal !== 0
     const key         = `${m.conta_debitar}|${m.empresa}|${pessoa_nome}|${mes}|${pago}`
     if (!agg[key]) agg[key] = {
       conta_debitar: m.conta_debitar ?? '',

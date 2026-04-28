@@ -22,7 +22,7 @@ export async function GET() {
   let query = admin.from('vw_marketing_saldo').select('*').order('posto_nome')
 
   // Gerente e operador veem apenas o próprio posto
-  if (usr && ['gerente', 'operador'].includes(usr.role) && usr.posto_fechamento_id) {
+  if (usr && usr.role === 'gerente' && usr.posto_fechamento_id) {
     query = query.eq('posto_id', usr.posto_fechamento_id)
   }
 

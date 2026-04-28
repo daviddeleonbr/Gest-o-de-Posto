@@ -13,18 +13,14 @@ export async function POST(request: Request) {
     .eq('id', user.id)
     .single()
 
-  if (!requester || !['master', 'admin'].includes(requester.role)) {
+  if (!requester || requester.role !== 'master') {
     return NextResponse.json({ error: 'Sem permissão' }, { status: 403 })
   }
 
-  const { nome, email, senha, role, empresa_id, posto_fechamento_id, postos_fechamento_ids } = await request.json()
+  const { nome, email, senha, role, empresa_id, posto_fechamento_id, postos_caixa } = await request.json()
 
   if (!nome || !email || !senha || !role) {
     return NextResponse.json({ error: 'Campos obrigatórios faltando' }, { status: 400 })
-  }
-
-  if (requester.role === 'admin' && !['operador', 'fechador'].includes(role)) {
-    return NextResponse.json({ error: 'Administrador só pode criar operadores e fechadores' }, { status: 403 })
   }
 
   const adminSupabase = createClient(
@@ -90,7 +86,7 @@ export async function POST(request: Request) {
     email,
     role,
     empresa_id: resolvedEmpresaId,
-    posto_fechamento_id: (role === 'fechador' || role === 'gerente') ? (posto_fechamento_id || null) : null,
+    posto_fechamento_id: (role === 'operador_caixa' || role === 'gerente') ? (posto_fechamento_id || null) : null,
     ativo: true,
   }, { onConflict: 'id' })
 
@@ -99,12 +95,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: insertError.message }, { status: 400 })
   }
 
-  // Fechador: insere postos na junction table
-  if (role === 'fechador' && Array.isArray(postos_fechamento_ids) && postos_fechamento_ids.length > 0) {
+  // Operador caixa: insere postos na junction table
+  if (role === 'operador_caixa' && Array.isArray(postos_caixa) && postos_caixa.length > 0) {
+    await adminSupabase.from('usuario_postos_caixa').delete().eq('usuario_id', newUserId)
     const { error: junctionError } = await adminSupabase
-      .from('usuario_postos_fechamento')
-      .insert(postos_fechamento_ids.map((pid: string) => ({ usuario_id: newUserId, posto_id: pid })))
-    if (junctionError) return NextResponse.json({ error: junctionError.message }, { status: 400 })
+      .from('usuario_postos_caixa')
+      .insert(postos_caixa.map((pid: string) => ({ usuario_id: newUserId, posto_id: pid })))
+    if (junctionError) console.error('[usuarios POST] junction error:', junctionError.message)
   }
 
   return NextResponse.json({ success: true, id: newUserId })

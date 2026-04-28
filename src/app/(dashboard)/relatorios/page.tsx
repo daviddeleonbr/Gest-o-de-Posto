@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { toast } from '@/hooks/use-toast'
 import { useAuthContext } from '@/contexts/AuthContext'
 import { exportPDF, exportXLS, type ReportData, type ReportColumn } from '@/lib/utils/reports'
-import { can, type Permission } from '@/lib/utils/permissions'
+import { type Permission } from '@/lib/utils/permissions'
 import {
   FileText, FileSpreadsheet, Loader2,
   Smartphone, Percent, MapPin, Link2,
@@ -437,7 +437,7 @@ const REPORTS: ReportDef[] = [
         .select('login, senha, observacoes, posto:postos(nome), portal:portais(nome)')
         .order('posto_id')
 
-      const showSenha = role === 'master' || role === 'admin'
+      const showSenha = role === 'master' || role === 'adm_financeiro'
 
       const columns: ReportColumn[] = [
         { header: 'Posto',       key: 'posto',       width: 28 },
@@ -479,7 +479,7 @@ const REPORTS: ReportDef[] = [
         .select('login, senha, observacoes, posto:postos(nome), portal:portais(nome)')
         .order('posto_id')
 
-      const showSenha = role === 'master' || role === 'admin'
+      const showSenha = role === 'master' || role === 'adm_financeiro'
 
       const columns: ReportColumn[] = [
         { header: 'Posto',       key: 'posto',       width: 28 },
@@ -521,7 +521,7 @@ const REPORTS: ReportDef[] = [
         .select('numero_anydesk, senha, observacoes, posto:postos(nome)')
         .order('posto_id')
 
-      const showSenha = role === 'master' || role === 'admin'
+      const showSenha = role === 'master' || role === 'adm_financeiro'
 
       const columns: ReportColumn[] = [
         { header: 'Posto',         key: 'posto',          width: 30 },
@@ -561,7 +561,7 @@ const REPORTS: ReportDef[] = [
         .select('nome_banco, ip, porta, usuario, senha, observacoes, posto:postos(nome)')
         .order('posto_id')
 
-      const showSenha = role === 'master' || role === 'admin'
+      const showSenha = role === 'master' || role === 'adm_financeiro'
 
       const columns: ReportColumn[] = [
         { header: 'Posto',       key: 'posto',       width: 26 },
@@ -1012,11 +1012,11 @@ function ReportCard({ report, role }: { report: ReportDef; role: Role | undefine
 
 // ── Página principal ────────────────────────────────────
 export default function RelatoriosPage() {
-  const { usuario } = useAuthContext()
+  const { usuario, canUser } = useAuthContext()
   const role = usuario?.role as Role | undefined
-  const isOperador = role === 'operador'
+  const isOperador = role === 'operador_caixa' || role === 'operador_conciliador'
 
-  const visibleReports = REPORTS.filter(r => can(role ?? null, r.permission))
+  const visibleReports = REPORTS.filter(r => canUser(r.permission))
 
   return (
     <div className="animate-fade-in">

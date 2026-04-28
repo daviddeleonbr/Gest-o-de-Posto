@@ -174,7 +174,7 @@ export default function AcessosUnificadosPage() {
         return (
           <div className="flex items-center gap-1 justify-end">
             <CopyButton text={parts.join('\n')} title="Copiar todas as informações" size="default" />
-            {role === 'operador' || role === 'conciliador' ? (
+            {role === 'operador_caixa' || role === 'operador_conciliador' ? (
               <Button
                 variant="ghost" size="icon"
                 className="h-8 w-8 text-gray-400 hover:text-orange-600 hover:bg-orange-50"
@@ -219,7 +219,7 @@ export default function AcessosUnificadosPage() {
       />
 
       <div className="p-3 md:p-6">
-        {(role === 'operador' || role === 'conciliador') && (
+        {(role === 'operador_caixa' || role === 'operador_conciliador') && (
           <div className="mb-4 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[12px] text-amber-700 flex items-center gap-2">
             <KeyRound className="w-3.5 h-3.5 flex-shrink-0" />
             <span>Você pode visualizar os acessos e alterar senhas. Para editar outros campos, contate o administrador.</span>

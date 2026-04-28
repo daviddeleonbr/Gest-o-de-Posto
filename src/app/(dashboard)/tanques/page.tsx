@@ -382,8 +382,8 @@ export default function TanquesPage() {
   const { usuario } = useAuthContext()
   const role          = usuario?.role as Role | undefined
   const isGerente     = role === 'gerente'
-  const isTranspombal = role === 'transpombal'
-  const isAdmin       = role === 'master' || role === 'admin' || isTranspombal
+  const isTranspombal = role === 'adm_transpombal'
+  const isAdmin       = role === 'master' || isTranspombal
 
   const [data,          setData]          = useState(today())
   const [postoFiltro,   setPostoFiltro]   = useState('')

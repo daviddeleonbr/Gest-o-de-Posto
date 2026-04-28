@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   if (postoNomeParam) {
     // Admin/transpombal selecionou posto pelo nome
     q = q.ilike('posto_nome', postoNomeParam)
-  } else if (['master', 'admin', 'transpombal', 'operador'].includes(userRole)) {
+  } else if (['master', 'adm_transpombal'].includes(userRole)) {
     // Vê todos os postos — sem filtro
   } else {
     // Gerente: filtra pelo posto vinculado

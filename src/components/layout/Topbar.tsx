@@ -12,12 +12,12 @@ import {
   TrendingUp, Wallet, Receipt, Settings, Megaphone, Gift, Database,
   ArrowLeftRight, Eye, EyeOff, X, ChevronDown,
   PackageSearch, Truck, CalendarDays, ShoppingCart, Menu,
-  Bell, Sun, Moon, CheckCheck,
+  Bell, Sun, Moon, CheckCheck, Scale,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useAuthContext } from '@/contexts/AuthContext'
 import { useTheme } from '@/contexts/ThemeContext'
-import { ROLE_LABELS, ROLE_COLORS } from '@/lib/utils/permissions'
+import { ROLE_LABELS, ROLE_COLORS, getRoleLabel, getRoleColor } from '@/lib/utils/permissions'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/hooks/use-toast'
 import type { Role } from '@/types/database.types'
@@ -33,36 +33,9 @@ type NavGroup = { label: string; items: NavItem[] }
 
 const NAV_GROUPS: NavGroup[] = [
   {
-    label: 'Cadastros',
-    items: [
-      { href: '/empresas',                   label: 'Empresas',           icon: Building2,   permission: 'empresas.view' as Permission },
-      { href: '/postos',                      label: 'Postos',              icon: MapPin,      permission: 'postos.view' as Permission },
-      { href: '/usuarios',                    label: 'Usuários',            icon: Users,       permission: 'usuarios.view' as Permission },
-      { href: '/formas-pagamento-adquirente', label: 'Formas de Pagamento', icon: Wallet,      permission: 'formas_pagamento.view' as Permission },
-      { href: '/maquininhas',                 label: 'Maquininhas',         icon: Smartphone,  permission: 'maquininhas.view' as Permission },
-      { href: '/taxas',                       label: 'Taxas',               icon: Percent,     permission: 'taxas.view' as Permission },
-      { href: '/adquirentes',                 label: 'Adquirentes',         icon: CreditCard,  permission: 'adquirentes.view' as Permission },
-      {
-        label: 'Máscaras', icon: Layers, permission: 'mascaras.view' as Permission, divider: true,
-        children: [
-          { href: '/mascaras/dre',          label: 'DRE',             icon: BarChart2,  permission: 'mascaras.view' as Permission },
-          { href: '/mascaras/fluxo-caixa',  label: 'Fluxo de Caixa',  icon: TrendingUp, permission: 'mascaras.view' as Permission },
-        ],
-      },
-    ],
-  },
-  {
     label: 'Financeiro',
     items: [
       { href: '/contas-receber', label: 'Contas a Receber', icon: ReceiptText, permission: 'contas_receber.view' as Permission },
-      {
-        label: 'Contas a Pagar', icon: Receipt, permission: 'contas_pagar.view' as Permission,
-        children: [
-          { href: '/contas-pagar/conferencia', label: 'Conferência Diária',    icon: ClipboardList, permission: 'contas_pagar.lancar' as Permission },
-          { href: '/contas-pagar/fixas',       label: 'Despesas Fixas',         icon: Wallet,        permission: 'contas_pagar.fixas.view' as Permission },
-          { href: '/contas-pagar/titulos',     label: 'Títulos a Pagar',        icon: Database,      permission: 'contas_pagar.view' as Permission },
-        ],
-      },
       {
         label: 'Conciliação Bancária', icon: ScanSearch, permission: 'relatorios.conciliacao' as Permission,
         children: [
@@ -72,17 +45,81 @@ const NAV_GROUPS: NavGroup[] = [
           { href: '/tarefas/conciliacao',      label: 'Geração de Tarefas', icon: ClipboardList, permission: 'contas_bancarias.view' as Permission },
         ],
       },
-      { href: '/contas-bancarias', label: 'Contas Bancárias',   icon: Landmark,    permission: 'contas_bancarias.view' as Permission },
       { href: '/controle-caixas',  label: 'Controle de Caixas', icon: CheckSquare, permission: 'controle_caixas.view' as Permission },
     ],
   },
   {
-    label: 'Estoque',
+    label: 'Fiscal',
+    items: [
+      { href: '/fiscal',         label: 'Painel Fiscal',      icon: Scale,         permission: 'fiscal.view' as Permission },
+      { href: '/fiscal/tarefas', label: 'Tarefas Fiscal',     icon: ClipboardList, permission: 'fiscal.view' as Permission },
+      { href: '/fiscal/geracao', label: 'Geração de Tarefas', icon: FileText,      permission: 'fiscal.geracao' as Permission },
+    ],
+  },
+  {
+    label: 'Contas a Pagar',
+    items: [
+      { href: '/contas-pagar/conferencia', label: 'Conferência Diária', icon: ClipboardList, permission: 'contas_pagar.lancar' as Permission },
+      { href: '/contas-pagar/fixas',       label: 'Despesas Fixas',     icon: Wallet,        permission: 'contas_pagar.fixas.view' as Permission },
+      { href: '/contas-pagar/titulos',     label: 'Títulos a Pagar',    icon: Database,      permission: 'contas_pagar.view' as Permission },
+    ],
+  },
+  {
+    label: 'Transpombal',
+    items: [
+      { href: '/transpombal', label: 'Transpombal — Frota', icon: Truck, permission: 'transpombal.view' as Permission },
+      { href: '/tanques',     label: 'Medição de Tanques',  icon: Fuel,  permission: 'tanques.view' as Permission },
+    ],
+  },
+  {
+    label: 'Máquinas',
+    items: [
+      {
+        label: 'Maquininhas / Bobinas', icon: Layers, permission: 'bobinas.view' as Permission,
+        children: [
+          { href: '/bobinas/solicitacoes', label: 'Troca de Maquininhas', icon: Receipt,  permission: 'bobinas.view' as Permission },
+          { href: '/bobinas/trocas',       label: 'Trocas',               icon: Archive,  permission: 'bobinas.view' as Permission },
+          { href: '/bobinas/estoque',      label: 'Estoque de Bobinas',   icon: Archive,  permission: 'bobinas.view' as Permission },
+        ],
+      },
+    ],
+  },
+  {
+    label: 'Compras',
     items: [
       { href: '/estoque',             label: 'Estoque',            icon: PackageSearch, permission: 'estoque.view' as Permission },
       { href: '/sugestao-pedido',     label: 'Sugestão de Pedido', icon: ShoppingCart,  permission: 'estoque.view' as Permission },
       { href: '/fornecedores',        label: 'Fornecedores',       icon: Truck,         permission: 'estoque.view' as Permission },
       { href: '/rotina-fornecedores', label: 'Rotina de Visitas',  icon: CalendarDays,  permission: 'estoque.view' as Permission },
+    ],
+  },
+  {
+    label: 'Marketing',
+    items: [
+      { href: '/marketing',             label: 'Dashboard',   icon: Megaphone,  permission: 'marketing.view' as Permission },
+      { href: '/marketing/patrocinio',  label: 'Patrocínios', icon: Gift,       permission: 'marketing.create_patrocinio' as Permission },
+      { href: '/marketing/acoes',       label: 'Ações',       icon: TrendingUp, permission: 'marketing.ver_acoes' as Permission },
+      { href: '/marketing/conciliacao', label: 'Conciliação', icon: Link2,      permission: 'marketing.conciliacao' as Permission },
+    ],
+  },
+  {
+    label: 'Cadastro',
+    items: [
+      { href: '/empresas',                   label: 'Empresas',           icon: Building2,  permission: 'empresas.view' as Permission },
+      { href: '/postos',                      label: 'Postos',             icon: MapPin,     permission: 'postos.view' as Permission },
+      { href: '/usuarios',                    label: 'Usuários',           icon: Users,      permission: 'usuarios.view' as Permission },
+      { href: '/formas-pagamento-adquirente', label: 'Formas de Pgto.',   icon: Wallet,     permission: 'formas_pagamento.view' as Permission },
+      { href: '/maquininhas',                 label: 'Maquininhas',        icon: Smartphone, permission: 'maquininhas.view' as Permission },
+      { href: '/taxas',                       label: 'Taxas',              icon: Percent,    permission: 'taxas.view' as Permission },
+      { href: '/adquirentes',                 label: 'Adquirentes',        icon: CreditCard, permission: 'adquirentes.view' as Permission },
+      { href: '/contas-bancarias',            label: 'Contas Bancárias',   icon: Landmark,   permission: 'contas_bancarias.view' as Permission },
+      {
+        label: 'Máscaras', icon: Layers, permission: 'mascaras.view' as Permission, divider: true,
+        children: [
+          { href: '/mascaras/dre',         label: 'DRE',            icon: BarChart2,  permission: 'mascaras.view' as Permission },
+          { href: '/mascaras/fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingUp, permission: 'mascaras.view' as Permission },
+        ],
+      },
     ],
   },
   {
@@ -98,35 +135,16 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Operações',
+    label: 'Tarefas',
     items: [
-      {
-        label: 'Maquininhas (Bobinas)', icon: Layers, permission: 'bobinas.view' as Permission,
-        children: [
-          { href: '/bobinas/solicitacoes', label: 'Troca de Maquininhas', icon: Receipt,  permission: 'bobinas.view' as Permission },
-          { href: '/bobinas/trocas',       label: 'Trocas',       icon: Archive,  permission: 'bobinas.view' as Permission },
-          { href: '/bobinas/estoque',      label: 'Estoque',      icon: Archive,  permission: 'bobinas.view' as Permission },
-        ],
-      },
-      { href: '/tarefas/avulsas', label: 'Tarefas',         icon: ClipboardList, permission: 'tarefas.view' as Permission },
-      { href: '/transpombal',     label: 'Transpombal — Frota',    icon: Truck,         permission: 'transpombal.view' as Permission },
-      { href: '/tanques',         label: 'Medição de Tanques',     icon: Fuel,          permission: 'tanques.view' as Permission },
-    ],
-  },
-  {
-    label: 'Marketing',
-    items: [
-      { href: '/marketing',             label: 'Dashboard',   icon: Megaphone,  permission: 'marketing.view' as Permission },
-      { href: '/marketing/patrocinio',  label: 'Patrocínios', icon: Gift,       permission: 'marketing.create_patrocinio' as Permission },
-      { href: '/marketing/acoes',       label: 'Ações',       icon: TrendingUp, permission: 'marketing.ver_acoes' as Permission },
-      { href: '/marketing/conciliacao', label: 'Conciliação', icon: Link2,      permission: 'marketing.conciliacao' as Permission },
+      { href: '/tarefas/avulsas', label: 'Gestão de Tarefas', icon: ClipboardList, permission: 'tarefas.view' as Permission },
     ],
   },
   {
     label: 'Config.',
     items: [
-      { href: '/perfis',                         label: 'Perfis de Acesso',         icon: ShieldCheck, permission: 'usuarios.edit' as Permission },
-      { href: '/controle-caixas/configuracoes', label: 'Config. de Caixas',        icon: Settings,    permission: 'controle_caixas.configurar' as Permission },
+      { href: '/perfis',                       label: 'Perfis de Acesso',         icon: ShieldCheck, permission: 'usuarios.edit' as Permission },
+      { href: '/controle-caixas/configuracoes', label: 'Config. de Caixas',       icon: Settings,    permission: 'controle_caixas.configurar' as Permission },
       { href: '/contas-receber/configuracao',   label: 'Config. Contas a Receber', icon: ReceiptText, permission: 'contas_receber.view' as Permission },
     ],
   },
@@ -152,6 +170,9 @@ interface Notificacao {
 }
 
 function NotificationBell() {
+  const { canUser } = useAuthContext()
+  const podeConciliacao = canUser('relatorios.conciliacao')
+
   const [naoLidas, setNaoLidas] = useState(0)
   const [notifs, setNotifs]     = useState<Notificacao[]>([])
   const [aberto, setAberto]     = useState(false)
@@ -163,8 +184,13 @@ function NotificationBell() {
       const res  = await fetch('/api/notificacoes')
       if (!res.ok) return
       const json = await res.json()
-      setNotifs(json.notificacoes ?? [])
-      setNaoLidas(json.naoLidas ?? 0)
+      const TIPOS_CONCILIACAO = ['divergencia_extrato', 'divergencia_resolvida']
+      const todas: Notificacao[] = json.notificacoes ?? []
+      const filtradas = podeConciliacao
+        ? todas
+        : todas.filter(n => !TIPOS_CONCILIACAO.includes(n.tipo))
+      setNotifs(filtradas)
+      setNaoLidas(filtradas.filter(n => !n.lida).length)
     } catch { /* silencioso */ }
   }
 
@@ -550,7 +576,7 @@ export function Topbar() {
               </div>
               <div className="hidden md:block text-left">
                 <p className="text-[12px] font-semibold text-white leading-tight truncate max-w-[120px]">{usuario?.nome}</p>
-                {role && <span className={cn('text-[9px] font-bold px-1 py-0.5 rounded uppercase tracking-wide', ROLE_COLORS[role])}>{ROLE_LABELS[role].split(' ')[0]}</span>}
+                {role && <span className={cn('text-[9px] font-bold px-1 py-0.5 rounded uppercase tracking-wide', getRoleColor(role))}>{getRoleLabel(role).split(' ')[0]}</span>}
               </div>
               <ChevronDown className={cn('hidden md:block w-3 h-3 text-white/40 transition-transform', userOpen && 'rotate-180')} />
             </button>
@@ -604,9 +630,32 @@ export function Topbar() {
                 <p className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-white/25 border-b border-white/[0.04]">{group.label}</p>
                 {visibleItems.map(item => {
                   const Icon = item.icon
+                  if (item.children) {
+                    const visibleChildren = item.children.filter(c => !c.permission || canUser(c.permission))
+                    if (!visibleChildren.length) return null
+                    return (
+                      <div key={item.label}>
+                        <p className="px-4 pt-2 pb-1 text-[10px] font-semibold text-white/30 uppercase tracking-wider">{item.label}</p>
+                        {visibleChildren.map(child => {
+                          const ChildIcon = child.icon
+                          const childActive = isActive(child.href)
+                          return (
+                            <Link key={child.href} href={child.href}
+                              onClick={() => setMobileOpen(false)}
+                              className={cn('flex items-center gap-2.5 pl-7 pr-4 py-2.5 text-[13px] font-medium border-b border-white/[0.03] transition-colors',
+                                childActive ? 'text-[#ffaa99] bg-[#8b1a14]/10' : 'text-white/50 hover:text-white hover:bg-white/[0.05]')}>
+                              <ChildIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                              {child.label}
+                            </Link>
+                          )
+                        })}
+                      </div>
+                    )
+                  }
                   const active = item.href ? isActive(item.href) : false
                   return (
                     <Link key={item.href} href={item.href!}
+                      onClick={() => setMobileOpen(false)}
                       className={cn('flex items-center gap-2.5 px-4 py-3 text-[13px] font-medium border-b border-white/[0.03] transition-colors',
                         active ? 'text-[#ffaa99] bg-[#8b1a14]/10' : 'text-white/50 hover:text-white hover:bg-white/[0.05]')}>
                       <Icon className="w-4 h-4 flex-shrink-0" />
@@ -669,58 +718,99 @@ export function Topbar() {
     {/* ── Modal Trocar Conta ── */}
     {showConta && (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100 sticky top-0 bg-white">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+          <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
             <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><ArrowLeftRight className="w-4 h-4 text-blue-600" /></div>
             <h2 className="font-semibold text-gray-900 text-[15px]">Trocar Conta</h2>
             <button onClick={() => setShowConta(false)} className="ml-auto text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
           </div>
-          <div className="p-5 space-y-3">
-            {loadingContas ? <p className="text-center text-sm text-gray-400 py-4">Carregando...</p>
-              : contas.length === 0 ? <p className="text-center text-sm text-gray-400 py-4">Nenhuma conta vinculada.</p>
-              : contas.map(c => (
-                <div key={c.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
-                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">{getInitials(c.nome)}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-gray-800 truncate">{c.nome}</p>
-                    <p className="text-[11px] text-gray-400 truncate">{c.email}</p>
-                    {senhaId === c.id && (
-                      <div className="flex items-center gap-2 mt-2">
-                        <div className="relative flex-1">
-                          <input type={showSenhaVal ? 'text' : 'password'} placeholder="Senha" value={senhaVal} onChange={e => setSenhaVal(e.target.value)}
-                            className="w-full px-2 py-1 pr-7 text-[12px] rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
-                          <button type="button" onClick={() => setShowSenhaVal(!showSenhaVal)} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400">
-                            {showSenhaVal ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+
+          {/* Lista de contas */}
+          <div className="overflow-y-auto max-h-[50vh] p-5 space-y-2">
+            {loadingContas
+              ? <p className="text-center text-sm text-gray-400 py-4">Carregando...</p>
+              : contas.length === 0
+                ? <p className="text-center text-sm text-gray-400 py-4">Nenhuma conta vinculada.</p>
+                : contas.map(c => (
+                  <div key={c.id} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+                        {getInitials(c.nome)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-semibold text-gray-800 truncate">{c.nome}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{c.email}</p>
+                      </div>
+                      {senhaId !== c.id && (
+                        <div className="flex gap-1 flex-shrink-0">
+                          <button onClick={() => { setSenhaId(c.id); setSenhaVal('') }}
+                            className="text-[11px] px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 font-medium">
+                            Entrar
+                          </button>
+                          <button onClick={() => removerConta(c.id)}
+                            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                            <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        <button onClick={() => trocarPara(c, senhaVal)} disabled={!!trocando}
-                          className="px-2 py-1 text-[11px] font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 whitespace-nowrap">
-                          {trocando === c.id ? '...' : 'Entrar'}
-                        </button>
+                      )}
+                    </div>
+                    {senhaId === c.id && (
+                      <div className="mt-3 space-y-2">
+                        <div className="relative">
+                          <input
+                            type={showSenhaVal ? 'text' : 'password'}
+                            placeholder="Digite a senha desta conta"
+                            value={senhaVal}
+                            onChange={e => setSenhaVal(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && trocarPara(c, senhaVal)}
+                            className="w-full px-3 py-2 pr-9 text-[13px] rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                          />
+                          <button type="button" onClick={() => setShowSenhaVal(!showSenhaVal)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400">
+                            {showSenhaVal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => trocarPara(c, senhaVal)} disabled={!!trocando || !senhaVal.trim()}
+                            className="flex-1 py-2 text-[13px] font-semibold bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors">
+                            {trocando === c.id ? 'Entrando...' : 'Confirmar Entrada'}
+                          </button>
+                          <button onClick={() => { setSenhaId(null); setSenhaVal('') }}
+                            className="px-4 py-2 text-[13px] text-gray-500 rounded-lg hover:bg-gray-100 transition-colors">
+                            Cancelar
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
-                  {senhaId !== c.id && (
-                    <div className="flex gap-1">
-                      <button onClick={() => { setSenhaId(c.id); setSenhaVal('') }}
-                        className="text-[11px] px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 font-medium whitespace-nowrap">Entrar</button>
-                      <button onClick={() => removerConta(c.id)} className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            <div className="border-t border-gray-100 pt-3">
-              <p className="text-[11px] font-medium text-gray-500 mb-2">Adicionar conta</p>
-              <div className="flex gap-2">
-                <input value={addNome} onChange={e => setAddNome(e.target.value)} placeholder="Nome" className="flex-1 px-2 py-1.5 text-[12px] rounded-lg border border-gray-200 focus:outline-none" />
-                <input value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="Email" className="flex-1 px-2 py-1.5 text-[12px] rounded-lg border border-gray-200 focus:outline-none" />
-                <button onClick={addConta} disabled={addSaving || !addEmail.trim()}
-                  className="px-3 py-1.5 text-[12px] font-medium bg-[#8b1a14] text-white rounded-lg hover:bg-[#711510] disabled:opacity-50">
-                  {addSaving ? '...' : 'Add'}
-                </button>
-              </div>
+                ))
+            }
+          </div>
+
+          {/* Adicionar conta */}
+          <div className="border-t border-gray-100 p-5 space-y-3">
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Adicionar conta</p>
+            <div className="space-y-2">
+              <input
+                value={addNome}
+                onChange={e => setAddNome(e.target.value)}
+                placeholder="Nome (opcional)"
+                className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#8b1a14]/30"
+              />
+              <input
+                value={addEmail}
+                onChange={e => setAddEmail(e.target.value)}
+                placeholder="E-mail da conta"
+                type="email"
+                className="w-full px-3 py-2 text-[13px] rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#8b1a14]/30"
+              />
+              <button
+                onClick={addConta}
+                disabled={addSaving || !addEmail.trim()}
+                className="w-full py-2 text-[13px] font-semibold bg-[#8b1a14] text-white rounded-lg hover:bg-[#711510] disabled:opacity-50 transition-colors"
+              >
+                {addSaving ? 'Adicionando...' : 'Adicionar Conta'}
+              </button>
             </div>
           </div>
         </div>

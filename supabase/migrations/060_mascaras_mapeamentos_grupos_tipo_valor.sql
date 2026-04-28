@@ -27,3 +27,44 @@ alter table public.mascaras_mapeamentos_grupos
 alter table public.mascaras_mapeamentos_grupos
   add constraint mascaras_mapeamentos_grupos_unique
   unique (mascara_id, grupo_grid, tipo_valor);
+Vamos la, preciso de fazer umas alterações no layout e nos usuarios
+
+Usuarios:
+quero mudar oo nomes dos perfils:
+Perfil Master
+Perfil ADM (Financeiro)
+Perfil ADM (Fiscal)
+Perfil ADM (Marketing)
+Perfil ADM (Transpombal)
+Perfil ADM (Contas a receber)
+
+Operador ( Fechador de caixa) - atribuir postos
+Operador ( Conciliador bancario) - atribuir postos
+
+Gerente - atribuir postos 
+
+
+
+Para o Master 
+Aba Deashboard:
+Pode deixra do jeito que esta.
+
+Aba Fianceiro:
+Contas a Receber 
+Conciliação bancaria 
+Controle de caixas 
+
+Aba Fiscal: (statos em breve)
+Painel fical
+terefa  filcal 
+GEração de tarefa
+
+Aba Contas a pagar:
+Contas a pagar 
+
+Aba Transpombal:
+Transpombal - frota
+Medição dos tanques 
+
+Aba MAquinas:
+MAquininhas - Bobinas

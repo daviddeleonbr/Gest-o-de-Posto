@@ -80,7 +80,7 @@ export default function TarefasAvulsasPage() {
   const canDelete   = can(role ?? null, 'tarefas.delete')
   const canEdit     = can(role ?? null, 'tarefas.edit')
   const canCreate   = can(role ?? null, 'tarefas.create')
-  const isMasterAdmin = role === 'master' || role === 'admin'
+  const isMasterAdmin = role === 'master'
 
   const [tarefas,   setTarefas]   = useState<Tarefa[]>([])
   const [usuarios,  setUsuarios]  = useState<Pick<Usuario, 'id' | 'nome'>[]>([])

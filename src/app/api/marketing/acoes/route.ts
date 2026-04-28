@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   // Verifica role
   const { data: usr } = await admin.from('usuarios').select('role').eq('id', user.id).single()
-  if (!usr || !['master', 'admin', 'marketing'].includes(usr.role)) {
+  if (!usr || !['master', 'adm_marketing'].includes(usr.role)) {
     return NextResponse.json({ error: 'Sem permissão para criar ações' }, { status: 403 })
   }
 

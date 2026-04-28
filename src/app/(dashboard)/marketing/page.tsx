@@ -9,9 +9,148 @@ import { cn } from '@/lib/utils/cn'
 import {
   Megaphone, Gift, Link2, AlertTriangle, CheckCircle2,
   Clock, TrendingUp, ChevronRight, Loader2, RefreshCw,
+  Send, Plus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuthContext } from '@/contexts/AuthContext'
+
+// ── Solicitação de Pagamento para Contas a Pagar ───────────────
+interface Solicitacao {
+  id: string; titulo: string; fornecedor: string | null; valor: number | null
+  data_vencimento: string | null; status: string; criado_em: string
+}
+const STATUS_COLOR_SOL: Record<string, string> = {
+  pendente: 'bg-yellow-100 text-yellow-700', em_analise: 'bg-blue-100 text-blue-700',
+  aprovado: 'bg-emerald-100 text-emerald-700', pago: 'bg-green-100 text-green-700',
+  rejeitado: 'bg-red-100 text-red-700',
+}
+const STATUS_LABEL_SOL: Record<string, string> = {
+  pendente: 'Pendente', em_analise: 'Em Análise', aprovado: 'Aprovado', pago: 'Pago', rejeitado: 'Rejeitado',
+}
+function fmtBRLSol(v: number | null) {
+  if (v == null) return '—'
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+function fmtDateSol(d: string | null) {
+  if (!d) return '—'
+  return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
+}
+
+function SolicitacoesPagamentoMarketing() {
+  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [showNova, setShowNova]         = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [form, setForm] = useState({ titulo: '', fornecedor: '', valor: '', data_vencimento: '', descricao: '' })
+
+  async function carregar() {
+    setLoading(true)
+    const r = await fetch('/api/solicitacoes-pagamento?setor=marketing')
+    const json = await r.json()
+    setSolicitacoes(json.solicitacoes ?? [])
+    setLoading(false)
+  }
+  useEffect(() => { carregar() }, [])
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.titulo.trim()) { toast({ variant: 'destructive', title: 'Informe o título' }); return }
+    setSaving(true)
+    const r = await fetch('/api/solicitacoes-pagamento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, setor: 'marketing', valor: form.valor ? Number(form.valor.replace(',', '.')) : null }),
+    })
+    if (r.ok) {
+      toast({ title: 'Solicitação enviada para Contas a Pagar!' })
+      setForm({ titulo: '', fornecedor: '', valor: '', data_vencimento: '', descricao: '' })
+      setShowNova(false); carregar()
+    } else { toast({ variant: 'destructive', title: 'Erro ao enviar' }) }
+    setSaving(false)
+  }
+
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl shadow-sm">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <Send className="w-4 h-4 text-blue-500" />
+          <span className="font-semibold text-gray-800 text-[13px]">Enviar para Contas a Pagar</span>
+          <span className="text-[11px] text-gray-400">({solicitacoes.length})</span>
+        </div>
+        <button onClick={() => setShowNova(v => !v)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-[12px] font-medium rounded-lg transition-colors">
+          <Plus className="w-3.5 h-3.5" /> Nova Solicitação
+        </button>
+      </div>
+      {showNova && (
+        <form onSubmit={enviar} className="p-4 border-b border-gray-100 space-y-3 bg-blue-50/40">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Título *</label>
+              <input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} required
+                placeholder="Ex: Patrocínio evento XYZ"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Fornecedor / Beneficiário</label>
+              <input value={form.fornecedor} onChange={e => setForm(f => ({ ...f, fornecedor: e.target.value }))}
+                placeholder="Nome"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Valor (R$)</label>
+              <input value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))}
+                placeholder="0,00"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Vencimento</label>
+              <input value={form.data_vencimento} onChange={e => setForm(f => ({ ...f, data_vencimento: e.target.value }))}
+                type="date"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Observações</label>
+              <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+                placeholder="Informações adicionais"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={saving}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-[13px] font-medium rounded-lg disabled:opacity-50">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              {saving ? 'Enviando...' : 'Enviar'}
+            </button>
+            <button type="button" onClick={() => setShowNova(false)}
+              className="px-4 py-2 text-gray-500 text-[13px] rounded-lg hover:bg-gray-100">Cancelar</button>
+          </div>
+        </form>
+      )}
+      {loading ? (
+        <div className="p-6 text-center text-[13px] text-gray-400">Carregando...</div>
+      ) : solicitacoes.length === 0 ? (
+        <div className="p-6 text-center text-[13px] text-gray-400">Nenhuma solicitação enviada</div>
+      ) : (
+        <div className="divide-y divide-gray-50">
+          {solicitacoes.map(s => (
+            <div key={s.id} className="px-5 py-3 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-gray-800 truncate">{s.titulo}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  {s.fornecedor ? `${s.fornecedor} · ` : ''}{fmtBRLSol(s.valor)}{s.data_vencimento ? ` · ${fmtDateSol(s.data_vencimento)}` : ''}
+                </p>
+              </div>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${STATUS_COLOR_SOL[s.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                {STATUS_LABEL_SOL[s.status] ?? s.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface Saldo {
@@ -273,6 +412,9 @@ export default function MarketingDashboard() {
                 </Link>
               ))}
             </div>
+
+            {/* Enviar para Contas a Pagar */}
+            {!isGerente && <SolicitacoesPagamentoMarketing />}
           </>
         )}
       </div>

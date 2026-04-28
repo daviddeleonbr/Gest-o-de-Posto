@@ -16,27 +16,28 @@ export default function FiscalGeracaoPage() {
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set())
   const [loading, setLoading]           = useState(true)
   const [gerando, setGerando]           = useState(false)
-  const [dataIni, setDataIni]           = useState(() => {
-    const d = new Date(); d.setDate(d.getDate() - 60)
-    return d.toISOString().slice(0, 10)
-  })
+  const [filtroPosto, setFiltroPosto]   = useState('')
 
   const carregar = useCallback(async () => {
     setLoading(true)
     setSelecionados(new Set())
-    const r = await fetch(`/api/fiscal/manifestos?data_ini=${dataIni}`)
+    const r = await fetch('/api/fiscal/manifestos')
     setManifestos(await r.json())
     setLoading(false)
-  }, [dataIni])
+  }, [])
 
   useEffect(() => { carregar() }, [carregar])
 
   function toggleTodos() {
-    if (selecionados.size === manifestos.length) {
-      setSelecionados(new Set())
-    } else {
-      setSelecionados(new Set(manifestos.map((_, i) => i)))
-    }
+    const visiveis = manifestos
+      .map((m: any, i: number) => ({ m, i }))
+      .filter(({ m }) => !filtroPosto || (m.posto?.nome ?? 'Sem posto mapeado') === filtroPosto)
+      .map(({ i }) => i)
+    const todosVisiveis = visiveis.every(i => selecionados.has(i))
+    const s = new Set(selecionados)
+    if (todosVisiveis) visiveis.forEach(i => s.delete(i))
+    else visiveis.forEach(i => s.add(i))
+    setSelecionados(s)
   }
 
   function toggle(i: number) {
@@ -60,9 +61,13 @@ export default function FiscalGeracaoPage() {
     carregar()
   }
 
-  // Agrupa por posto para visualização
+  // Lista de postos disponíveis para o filtro
+  const listaPosots = [...new Set(manifestos.map((m: any) => m.posto?.nome ?? 'Sem posto mapeado'))].sort()
+
+  // Agrupa por posto para visualização (aplica filtro se selecionado)
   const porPosto = manifestos.reduce((acc: any, m: any, i: number) => {
     const key = m.posto?.nome ?? 'Sem posto mapeado'
+    if (filtroPosto && key !== filtroPosto) return acc
     if (!acc[key]) acc[key] = []
     acc[key].push({ ...m, _idx: i })
     return acc
@@ -78,12 +83,14 @@ export default function FiscalGeracaoPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <input
-            type="date"
-            value={dataIni}
-            onChange={e => setDataIni(e.target.value)}
+          <select
+            value={filtroPosto}
+            onChange={e => setFiltroPosto(e.target.value)}
             className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-          />
+          >
+            <option value="">Todos os postos</option>
+            {listaPosots.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
           <button onClick={carregar} disabled={loading}
             className="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors">
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -110,17 +117,24 @@ export default function FiscalGeracaoPage() {
       ) : (
         <div className="space-y-4">
           {/* Selecionar todos */}
-          <div className="flex items-center gap-3 px-1">
-            <input
-              type="checkbox"
-              checked={selecionados.size === manifestos.length && manifestos.length > 0}
-              onChange={toggleTodos}
-              className="w-4 h-4 accent-blue-500"
-            />
-            <span className="text-sm text-gray-400">
-              Selecionar todos ({manifestos.length}) — {selecionados.size} selecionados
-            </span>
-          </div>
+          {(() => {
+            const visiveis = Object.values(porPosto).flat() as any[]
+            const totalVisiveis = visiveis.length
+            const selecionadosVisiveis = visiveis.filter((m: any) => selecionados.has(m._idx)).length
+            return (
+              <div className="flex items-center gap-3 px-1">
+                <input
+                  type="checkbox"
+                  checked={totalVisiveis > 0 && selecionadosVisiveis === totalVisiveis}
+                  onChange={toggleTodos}
+                  className="w-4 h-4 accent-blue-500"
+                />
+                <span className="text-sm text-gray-400">
+                  Selecionar todos ({totalVisiveis}) — {selecionados.size} selecionado(s)
+                </span>
+              </div>
+            )
+          })()}
 
           {/* Por posto */}
           {Object.entries(porPosto).map(([postoNome, items]: [string, any]) => (

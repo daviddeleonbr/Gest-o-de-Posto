@@ -7,9 +7,15 @@ export async function GET(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
 
+    // Busca role e posto do usuário logado no servidor
+    const { data: usuario } = await supabase
+      .from('usuarios')
+      .select('role, posto_fechamento_id')
+      .eq('id', user.id)
+      .single()
+
     const { searchParams } = new URL(req.url)
     const status = searchParams.get('status')
-    const posto_id = searchParams.get('posto_id')
 
     let query = supabase
       .from('fiscal_tarefas')
@@ -17,7 +23,16 @@ export async function GET(req: NextRequest) {
       .order('criada_em', { ascending: false })
 
     if (status) query = query.eq('status', status)
-    if (posto_id) query = query.eq('posto_id', posto_id)
+
+    // Gerente vê apenas tarefas do próprio posto — filtro obrigatório no servidor
+    if (usuario?.role === 'gerente') {
+      if (!usuario.posto_fechamento_id) return NextResponse.json([])
+      query = query.eq('posto_id', usuario.posto_fechamento_id)
+    } else {
+      // Outros roles podem filtrar por posto opcional
+      const posto_id = searchParams.get('posto_id')
+      if (posto_id) query = query.eq('posto_id', posto_id)
+    }
 
     const { data, error } = await query
     if (error) throw error

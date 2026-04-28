@@ -5,6 +5,7 @@ import {
   FileText, CheckCircle2, Clock, XCircle,
   Building2, ChevronDown, ChevronUp, Paperclip,
 } from 'lucide-react'
+import { useAuthContext } from '@/contexts/AuthContext'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   pendente_gerente:  { label: 'Pend. Gerente',  color: 'text-yellow-400', bg: 'bg-yellow-900/30' },
@@ -222,6 +223,10 @@ function Etapa({
 }
 
 export default function FiscalTarefasPage() {
+  const { usuario } = useAuthContext()
+  const isGerente = usuario?.role === 'gerente'
+  const postoIdGerente = usuario?.posto_fechamento_id ?? null
+
   const [tarefas, setTarefas]   = useState<any[]>([])
   const [loading, setLoading]   = useState(true)
   const [filtroStatus, setFiltroStatus] = useState('')
@@ -231,11 +236,13 @@ export default function FiscalTarefasPage() {
     setLoading(true)
     const params = new URLSearchParams()
     if (filtroStatus) params.set('status', filtroStatus)
-    if (filtroPosto)  params.set('posto_id', filtroPosto)
+    // Gerente só vê as tarefas do próprio posto
+    const postoFiltro = isGerente ? postoIdGerente : filtroPosto
+    if (postoFiltro) params.set('posto_id', postoFiltro)
     const r = await fetch(`/api/fiscal/tarefas?${params}`)
     setTarefas(await r.json())
     setLoading(false)
-  }, [filtroStatus, filtroPosto])
+  }, [filtroStatus, filtroPosto, isGerente, postoIdGerente])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -264,14 +271,16 @@ export default function FiscalTarefasPage() {
           <option value="aguardando_fiscal">Aguardando Fiscal</option>
           <option value="concluida">Concluídas</option>
         </select>
-        <select
-          value={filtroPosto}
-          onChange={e => setFiltroPosto(e.target.value)}
-          className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-        >
-          <option value="">Todos os postos</option>
-          {postos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
-        </select>
+        {!isGerente && (
+          <select
+            value={filtroPosto}
+            onChange={e => setFiltroPosto(e.target.value)}
+            className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
+          >
+            <option value="">Todos os postos</option>
+            {postos.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        )}
       </div>
 
       {loading ? (

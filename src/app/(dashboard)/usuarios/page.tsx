@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
 import { useAuthContext } from '@/contexts/AuthContext'
-import { can, PERMISSIONS, ROLE_LABELS, ROLE_COLORS } from '@/lib/utils/permissions'
+import { can, PERMISSIONS, ROLE_LABELS, ROLE_COLORS, getRoleLabel, getRoleColor } from '@/lib/utils/permissions'
 import { formatDate } from '@/lib/utils/formatters'
 import { cn } from '@/lib/utils/cn'
 import {
@@ -24,7 +24,7 @@ import {
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Usuario, Empresa, Posto, Role, PerfilPermissoes } from '@/types/database.types'
 
-const EMPTY_FORM = { nome: '', email: '', senha: '', role: 'operador' as Role, empresa_id: '', posto_fechamento_id: '', postos_fechamento_ids: [] as string[], perfil_id: '' }
+const EMPTY_FORM = { nome: '', email: '', senha: '', role: 'operador_caixa' as Role, empresa_id: '', posto_fechamento_id: '', postos_fechamento_ids: [] as string[], perfil_id: '' }
 
 // Grupos de permissões para exibição no painel de detalhes
 const PERM_GRUPOS = [
@@ -143,6 +143,9 @@ export default function UsuariosPage() {
   const [todosPostos,  setTodosPostos]  = useState<Pick<Posto, 'id' | 'nome'>[]>([])
   const [postosForm,   setPostosForm]   = useState<Pick<Posto, 'id' | 'nome'>[]>([])
 
+  // ── Multi-postos para operador_caixa ───────────────────────────
+  const [postosCaixaSel, setPostosCaixaSel] = useState<Set<string>>(new Set())
+
   async function load() {
     setLoading(true)
     const [usuariosRes, recorrentesRes, postosRes] = await Promise.all([
@@ -191,7 +194,7 @@ export default function UsuariosPage() {
     const [tarefasRes, recorrentesRes, postosRes] = await Promise.all([
       supabase.from('tarefas').select('status').eq('responsavel_id', u.id),
       supabase.from('tarefas_recorrentes').select('id', { count: 'exact', head: true }).eq('usuario_id', u.id).eq('ativo', true),
-      u.role === 'conciliador'
+      u.role === 'operador_conciliador'
         ? supabase.from('tarefas_recorrentes').select('posto:postos(nome)').eq('usuario_id', u.id).eq('ativo', true).not('posto_id', 'is', null)
         : Promise.resolve({ data: [] as { posto: { nome: string } | null }[] }),
     ])
@@ -214,11 +217,12 @@ export default function UsuariosPage() {
     const empId = usuario?.empresa_id ?? ''
     setForm({ ...EMPTY_FORM, empresa_id: empId })
     setPostosForm([])
+    setPostosCaixaSel(new Set())
     setShowPass(false)
     setOpenForm(true)
   }
 
-  function openEdit(u: Usuario) {
+  async function openEdit(u: Usuario) {
     setSelected(u)
     setForm({
       nome: u.nome, email: u.email, senha: '',
@@ -227,7 +231,21 @@ export default function UsuariosPage() {
       postos_fechamento_ids: [],
       perfil_id: u.perfil_id ?? '',
     })
-    if ((u.role === 'fechador' || u.role === 'gerente') && u.empresa_id) loadPostosParaFechador(u.empresa_id)
+    setPostosCaixaSel(new Set())
+    if ((u.role === 'operador_caixa' || u.role === 'gerente') && u.empresa_id) {
+      await loadPostosParaFechador(u.empresa_id)
+    }
+    if (u.role === 'operador_caixa') {
+      const { data } = await supabase
+        .from('usuario_postos_caixa')
+        .select('posto_id')
+        .eq('usuario_id', u.id)
+      if (data?.length) {
+        setPostosCaixaSel(new Set(data.map(r => r.posto_id as string)))
+      } else if ((u as any).posto_fechamento_id) {
+        setPostosCaixaSel(new Set([(u as any).posto_fechamento_id]))
+      }
+    }
     setShowPass(false)
     setOpenForm(true)
   }
@@ -354,16 +372,32 @@ export default function UsuariosPage() {
     setSaving(true)
 
     if (selected) {
+      // Define posto_fechamento_id como o primeiro da seleção (ou o único para gerente)
+      const postoFechamento = form.role === 'operador_caixa'
+        ? (postosCaixaSel.size > 0 ? Array.from(postosCaixaSel)[0] : null)
+        : form.role === 'gerente' ? (form.posto_fechamento_id || null) : null
+
       const { error } = await supabase
         .from('usuarios')
         .update({
           nome: form.nome,
           role: form.role,
           empresa_id: form.empresa_id || null,
-          posto_fechamento_id: (form.role === 'fechador' || form.role === 'gerente') ? (form.posto_fechamento_id || null) : null,
+          posto_fechamento_id: postoFechamento,
           perfil_id: form.perfil_id || null,
         })
         .eq('id', selected.id)
+
+      // Atualiza vínculos de postos para operador_caixa
+      if (!error && form.role === 'operador_caixa') {
+        await supabase.from('usuario_postos_caixa').delete().eq('usuario_id', selected.id)
+        if (postosCaixaSel.size > 0) {
+          await supabase.from('usuario_postos_caixa').insert(
+            Array.from(postosCaixaSel).map(pid => ({ usuario_id: selected.id, posto_id: pid }))
+          )
+        }
+      }
+
       if (error) {
         toast({ variant: 'destructive', title: 'Erro ao atualizar', description: error.message })
       } else {
@@ -372,6 +406,10 @@ export default function UsuariosPage() {
         load()
       }
     } else {
+      const postoFechamento = form.role === 'operador_caixa'
+        ? (postosCaixaSel.size > 0 ? Array.from(postosCaixaSel)[0] : null)
+        : form.role === 'gerente' ? (form.posto_fechamento_id || null) : null
+
       const res = await fetch('/api/usuarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -381,7 +419,8 @@ export default function UsuariosPage() {
           senha: form.senha,
           role: form.role,
           empresa_id: form.empresa_id || null,
-          posto_fechamento_id: (form.role === 'fechador' || form.role === 'gerente') ? (form.posto_fechamento_id || null) : null,
+          posto_fechamento_id: postoFechamento,
+          postos_caixa: form.role === 'operador_caixa' ? Array.from(postosCaixaSel) : [],
         }),
       })
       const data = await res.json()
@@ -438,8 +477,8 @@ export default function UsuariosPage() {
   }
 
   const availableRoles: Role[] = role === 'master'
-    ? ['master', 'admin', 'operador', 'conciliador', 'fechador', 'marketing', 'gerente', 'transpombal']
-    : ['operador', 'conciliador', 'fechador', 'marketing', 'gerente', 'transpombal']
+    ? ['master', 'adm_financeiro', 'adm_fiscal', 'adm_marketing', 'adm_transpombal', 'adm_contas_pagar', 'operador_caixa', 'operador_conciliador', 'gerente']
+    : ['adm_financeiro', 'adm_fiscal', 'adm_marketing', 'adm_transpombal', 'adm_contas_pagar', 'operador_caixa', 'operador_conciliador', 'gerente']
 
   const columns: ColumnDef<Usuario>[] = [
     {
@@ -467,9 +506,9 @@ export default function UsuariosPage() {
       cell: ({ row }) => (
         <span className={cn(
           'text-[11px] font-semibold px-2 py-0.5 rounded-md uppercase tracking-wide',
-          ROLE_COLORS[row.original.role]
+          getRoleColor(row.original.role)
         )}>
-          {ROLE_LABELS[row.original.role]}
+          {getRoleLabel(row.original.role)}
         </span>
       ),
     },
@@ -632,9 +671,9 @@ export default function UsuariosPage() {
               {selected && (
                 <span className={cn(
                   'ml-auto text-[11px] font-semibold px-2.5 py-1 rounded-md uppercase tracking-wide',
-                  ROLE_COLORS[selected.role]
+                  getRoleColor(selected.role)
                 )}>
-                  {ROLE_LABELS[selected.role]}
+                  {getRoleLabel(selected.role)}
                 </span>
               )}
             </div>
@@ -695,7 +734,7 @@ export default function UsuariosPage() {
               </div>
 
               {/* Tarefas recorrentes / postos (conciliador) */}
-              {selected.role === 'conciliador' && (
+              {selected.role === 'operador_conciliador' && (
                 <div>
                   <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                     <RotateCcw className="w-3.5 h-3.5" />
@@ -721,7 +760,7 @@ export default function UsuariosPage() {
                 {(() => {
                   const perfilCustom = selected.perfil_id ? (selected.perfil as PerfilPermissoes | null) : null
                   const permissoesCustom = perfilCustom?.permissoes ?? null
-                  const titulo = perfilCustom ? `Permissões do Perfil — ${perfilCustom.nome}` : `Permissões do Cargo — ${ROLE_LABELS[selected.role]}`
+                  const titulo = perfilCustom ? `Permissões do Perfil — ${perfilCustom.nome}` : `Permissões do Cargo — ${getRoleLabel(selected.role)}`
                   return (
                     <>
                       <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -838,7 +877,7 @@ export default function UsuariosPage() {
                 onValueChange={v => {
                   const newRole = v as Role
                   setForm(p => ({ ...p, role: newRole, posto_fechamento_id: '' }))
-                  if (newRole === 'fechador' || newRole === 'gerente') {
+                  if (newRole === 'operador_caixa' || newRole === 'gerente') {
                     const empId = form.empresa_id || usuario?.empresa_id || ''
                     loadPostosParaFechador(empId)
                   } else {
@@ -858,7 +897,7 @@ export default function UsuariosPage() {
                 <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-amber-700 leading-relaxed">
-                    O perfil será alterado de <strong>{ROLE_LABELS[selected.role]}</strong> para <strong>{ROLE_LABELS[form.role]}</strong>.
+                    O perfil será alterado de <strong>{getRoleLabel(selected.role)}</strong> para <strong>{getRoleLabel(form.role)}</strong>.
                     As tarefas já criadas e atribuídas a este usuário permanecerão normalmente.
                   </p>
                 </div>
@@ -874,7 +913,7 @@ export default function UsuariosPage() {
                 >
                   <SelectTrigger><SelectValue placeholder="Usar permissões do cargo padrão" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">— Usar cargo padrão ({ROLE_LABELS[form.role]})</SelectItem>
+                    <SelectItem value="__none__">— Usar cargo padrão ({getRoleLabel(form.role)})</SelectItem>
                     {perfis.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
                     ))}
@@ -895,7 +934,7 @@ export default function UsuariosPage() {
                   value={form.empresa_id}
                   onValueChange={v => {
                     setForm(p => ({ ...p, empresa_id: v, posto_fechamento_id: '' }))
-                    if (form.role === 'fechador') loadPostosParaFechador(v)
+                    if (form.role === 'operador_caixa') loadPostosParaFechador(v)
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Selecione a empresa" /></SelectTrigger>
@@ -905,27 +944,39 @@ export default function UsuariosPage() {
                 </Select>
               </div>
             )}
-            {form.role === 'fechador' && (
+            {form.role === 'operador_caixa' && (
               <div className="space-y-1.5">
                 <Label className="text-[12px] font-medium text-gray-600">
-                  Posto responsável <span className="text-red-500">*</span>
+                  Postos responsáveis <span className="text-red-500">*</span>
+                  {postosCaixaSel.size > 0 && (
+                    <span className="ml-1.5 text-orange-600">({postosCaixaSel.size} selecionado{postosCaixaSel.size > 1 ? 's' : ''})</span>
+                  )}
                 </Label>
                 {postosForm.length === 0 ? (
                   <p className="text-[12px] text-gray-400 italic">
                     {form.empresa_id ? 'Nenhum posto encontrado para esta empresa.' : 'Selecione a empresa primeiro.'}
                   </p>
                 ) : (
-                  <Select
-                    value={form.posto_fechamento_id}
-                    onValueChange={v => setForm(p => ({ ...p, posto_fechamento_id: v }))}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Selecione o posto..." /></SelectTrigger>
-                    <SelectContent>
-                      {postosForm.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                    {postosForm.map(p => (
+                      <label key={p.id} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-orange-50 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={postosCaixaSel.has(p.id)}
+                          onChange={() => setPostosCaixaSel(prev => {
+                            const next = new Set(prev)
+                            if (next.has(p.id)) next.delete(p.id)
+                            else next.add(p.id)
+                            return next
+                          })}
+                          className="rounded border-gray-300 text-orange-500 accent-orange-500"
+                        />
+                        <span className="text-[13px] text-gray-700">{p.nome}</span>
+                      </label>
+                    ))}
+                  </div>
                 )}
-                <p className="text-[11px] text-gray-400">O fechador só verá e enviará fechamentos deste posto.</p>
+                <p className="text-[11px] text-gray-400">Pode selecionar múltiplos postos. O operador verá e enviará fechamentos de todos eles.</p>
               </div>
             )}
             {form.role === 'gerente' && (

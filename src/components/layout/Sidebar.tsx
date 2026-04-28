@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useAuthContext } from '@/contexts/AuthContext'
-import { ROLE_LABELS, ROLE_COLORS } from '@/lib/utils/permissions'
+import { ROLE_LABELS, ROLE_COLORS, getRoleLabel, getRoleColor } from '@/lib/utils/permissions'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/hooks/use-toast'
 import type { Role } from '@/types/database.types'
@@ -63,6 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/maquininhas',                 label: 'Maquininhas',          icon: Smartphone,  permission: 'maquininhas.view' as Permission },
       { href: '/taxas',                       label: 'Taxas',                icon: Percent,     permission: 'taxas.view' as Permission },
       { href: '/adquirentes',                 label: 'Adquirentes',          icon: CreditCard,  permission: 'adquirentes.view' as Permission },
+      { href: '/contas-bancarias',            label: 'Contas Bancárias',     icon: Landmark,    permission: 'contas_bancarias.view' as Permission },
     ],
   },
   {
@@ -86,7 +87,6 @@ const NAV_GROUPS: NavGroup[] = [
           { href: '/tarefas/conciliacao',      label: 'Geração de Tarefas',  icon: ClipboardList, permission: 'contas_bancarias.view' as Permission },
         ],
       },
-      { href: '/contas-bancarias', label: 'Contas Bancárias',   icon: Landmark,    permission: 'contas_bancarias.view' as Permission },
       { href: '/controle-caixas',  label: 'Controle de Caixas', icon: CheckSquare, permission: 'controle_caixas.view' as Permission },
     ],
   },
@@ -544,9 +544,9 @@ export function Sidebar() {
             {role && (
               <span className={cn(
                 'text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 uppercase tracking-wide',
-                ROLE_COLORS[role],
+                getRoleColor(role),
               )}>
-                {ROLE_LABELS[role].split(' ')[0]}
+                {getRoleLabel(role).split(' ')[0]}
               </span>
             )}
           </div>
@@ -680,9 +680,9 @@ export function Sidebar() {
                   </div>
                   <span className={cn(
                     'text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide flex-shrink-0',
-                    role ? ROLE_COLORS[role] : 'bg-gray-100 text-gray-600'
+                    getRoleColor(role)
                   )}>
-                    {role ? ROLE_LABELS[role].split(' ')[0] : ''}
+                    {getRoleLabel(role).split(' ')[0]}
                   </span>
                 </div>
               </div>

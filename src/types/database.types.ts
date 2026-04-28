@@ -1,4 +1,13 @@
-export type Role = 'master' | 'admin' | 'operador' | 'conciliador' | 'fechador' | 'marketing' | 'gerente' | 'transpombal'
+export type Role =
+  | 'master'
+  | 'adm_financeiro'
+  | 'adm_fiscal'
+  | 'adm_marketing'
+  | 'adm_transpombal'
+  | 'adm_contas_pagar'
+  | 'operador_caixa'
+  | 'operador_conciliador'
+  | 'gerente'
 export type StatusEmpresa = 'ativo' | 'inativo' | 'suspenso'
 export type StatusMaquininha = 'ativo' | 'inativo' | 'estoque' | 'manutencao' | 'extraviada' | 'devolvida'
 

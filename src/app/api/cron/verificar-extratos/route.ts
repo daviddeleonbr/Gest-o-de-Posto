@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   const { data: masterAdmins } = await admin
     .from('usuarios')
     .select('id')
-    .in('role', ['master', 'admin'])
+    .in('role', ['master', 'adm_financeiro'])
 
   const masterAdminIds = (masterAdmins ?? []).map(u => u.id as string)
 

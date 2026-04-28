@@ -12,6 +12,7 @@ import {
   Smartphone, TrendingUp, AlertCircle, Wrench,
   DollarSign, BarChart2, Percent, Package,
   TrendingDown, Search, Loader2, AlertTriangle, CheckCircle2, FileBarChart,
+  Scale, Megaphone, Wallet, ShoppingCart, ReceiptText, Truck, Clock,
 } from 'lucide-react'
 import { RelatoriosGerenciaisTab } from '@/components/analitico/RelatoriosGerenciaisTab'
 import {
@@ -21,6 +22,38 @@ import {
 } from 'recharts'
 import type { Role } from '@/types/database.types'
 import type { DreRow } from '@/app/api/analise-externo/route'
+
+// ── Abas visíveis por perfil ───────────────────────────────────
+type TabId =
+  | 'dre' | 'relatorios' | 'maquininhas' | 'alugueis' | 'taxas'
+  | 'fiscal' | 'contas_pagar' | 'marketing' | 'compras' | 'contas_receber' | 'transpombal'
+
+const TABS_POR_ROLE: Partial<Record<Role, TabId[]>> = {
+  master:           ['dre', 'relatorios', 'maquininhas', 'alugueis', 'taxas', 'contas_receber', 'fiscal', 'contas_pagar', 'marketing', 'compras', 'transpombal'],
+  adm_financeiro:   ['dre', 'relatorios', 'maquininhas', 'alugueis', 'taxas', 'contas_receber'],
+  adm_fiscal:       ['fiscal'],
+  adm_marketing:    ['marketing'],
+  adm_transpombal:  ['transpombal', 'compras'],
+  adm_contas_pagar: ['contas_pagar'],
+}
+
+// ── Componente placeholder para seções em desenvolvimento ─────
+function PlaceholderTab({ titulo, descricao, icon: Icon }: { titulo: string; descricao: string; icon: React.ElementType }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+      <div className="w-16 h-16 rounded-2xl bg-orange-100 flex items-center justify-center">
+        <Icon className="w-8 h-8 text-orange-500" />
+      </div>
+      <div>
+        <p className="text-[16px] font-semibold text-gray-800">{titulo}</p>
+        <p className="text-[13px] text-gray-400 mt-1 max-w-xs">{descricao}</p>
+      </div>
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-3 py-1 rounded-full bg-amber-100 text-amber-700">
+        <Clock className="w-3 h-3" /> Em desenvolvimento
+      </span>
+    </div>
+  )
+}
 
 // ── Tipos internos ────────────────────────────────────────────
 interface MaqRow {
@@ -408,7 +441,7 @@ export default function AnaliticoPage() {
   const [maqRows, setMaqRows] = useState<MaqRow[]>([])
   const [taxRows, setTaxRows] = useState<TaxaRow[]>([])
   const [loading, setLoading] = useState(true)
-  const [tabAtiva, setTabAtiva] = useState<'maquininhas' | 'alugueis' | 'taxas' | 'dre' | 'relatorios'>('dre')
+  const [tabAtiva, setTabAtiva] = useState<TabId>('dre')
 
   useEffect(() => {
     async function load() {
@@ -480,20 +513,32 @@ export default function AnaliticoPage() {
   const mediaCred = taxRows.filter(r => r.taxa_credito !== null).reduce((s, r) => s + (r.taxa_credito ?? 0), 0) / (taxRows.filter(r => r.taxa_credito !== null).length || 1)
   const mediaParc = taxRows.filter(r => r.taxa_credito_parcelado !== null).reduce((s, r) => s + (r.taxa_credito_parcelado ?? 0), 0) / (taxRows.filter(r => r.taxa_credito_parcelado !== null).length || 1)
 
-  const TABS = [
-    { id: 'dre',         label: 'Análise de Taxa',     icon: BarChart2    },
-    { id: 'relatorios',  label: 'Relatórios Gerenciais', icon: FileBarChart },
-    { id: 'maquininhas', label: 'Gráficos',            icon: BarChart2    },
-    { id: 'alugueis',    label: 'Aluguéis',            icon: DollarSign   },
-    { id: 'taxas',       label: 'Taxas',               icon: Percent      },
-  ] as const
+  const ALL_TABS = [
+    { id: 'dre'           as TabId, label: 'Análise de Taxas',       icon: BarChart2    },
+    { id: 'relatorios'    as TabId, label: 'Rel. Gerenciais',         icon: FileBarChart },
+    { id: 'maquininhas'   as TabId, label: 'Gráf. Maquininhas',       icon: Smartphone   },
+    { id: 'alugueis'      as TabId, label: 'Aluguéis',                icon: DollarSign   },
+    { id: 'taxas'         as TabId, label: 'Taxas',                   icon: Percent      },
+    { id: 'contas_receber' as TabId, label: 'Contas a Receber',       icon: ReceiptText  },
+    { id: 'fiscal'        as TabId, label: 'Fiscal',                  icon: Scale        },
+    { id: 'contas_pagar'  as TabId, label: 'Contas a Pagar',          icon: Wallet       },
+    { id: 'marketing'     as TabId, label: 'Marketing',               icon: Megaphone    },
+    { id: 'compras'       as TabId, label: 'Compras',                 icon: ShoppingCart },
+    { id: 'transpombal'   as TabId, label: 'Transpombal',             icon: Truck        },
+  ]
+
+  const tabsPermitidas: TabId[] = role ? (TABS_POR_ROLE[role] ?? []) : []
+  const TABS = ALL_TABS.filter(t => tabsPermitidas.includes(t.id))
+
+  // Se a aba ativa não está mais disponível, resetar para a primeira disponível
+  const tabAtivaEfetiva: TabId = TABS.find(t => t.id === tabAtiva)?.id ?? (TABS[0]?.id ?? 'dre')
 
   const tickStyle = { fontSize: 11, fill: '#94a3b8' }
   const gridProps = { stroke: '#f1f5f9', vertical: false }
 
   return (
     <div className="animate-fade-in">
-      <Header title="Analítico" description="DRE financeiro, maquininhas, aluguéis e taxas" />
+      <Header title="Analítico" description="Painéis analíticos por setor" />
 
       <div className="p-3 md:p-6 space-y-6">
         {/* Abas */}
@@ -501,20 +546,20 @@ export default function AnaliticoPage() {
           {TABS.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTabAtiva(id)}
               className={cn('flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium transition-all duration-150',
-                tabAtiva === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
+                tabAtivaEfetiva === id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700')}>
               <Icon className="w-3.5 h-3.5" />{label}
             </button>
           ))}
         </div>
 
         {/* ── DRE ── */}
-        {tabAtiva === 'dre' && <DreTab />}
+        {tabAtivaEfetiva === 'dre' && <DreTab />}
 
         {/* ── RELATÓRIOS GERENCIAIS ── */}
-        {tabAtiva === 'relatorios' && <RelatoriosGerenciaisTab />}
+        {tabAtivaEfetiva === 'relatorios' && <RelatoriosGerenciaisTab />}
 
         {/* ── MAQUININHAS ── */}
-        {tabAtiva === 'maquininhas' && (
+        {tabAtivaEfetiva === 'maquininhas' && (
           <div className="space-y-6">
             {loading ? <div className="skeleton h-32 rounded-xl w-full" /> : (
               <>
@@ -570,7 +615,7 @@ export default function AnaliticoPage() {
         )}
 
         {/* ── ALUGUÉIS ── */}
-        {tabAtiva === 'alugueis' && (
+        {tabAtivaEfetiva === 'alugueis' && (
           <div className="space-y-6">
             <SectionTitle>Resumo de Aluguéis</SectionTitle>
             {comAlug.length === 0 ? (
@@ -626,7 +671,7 @@ export default function AnaliticoPage() {
         )}
 
         {/* ── TAXAS ── */}
-        {tabAtiva === 'taxas' && (
+        {tabAtivaEfetiva === 'taxas' && (
           <div className="space-y-6">
             <SectionTitle>Médias de Taxas Cadastradas</SectionTitle>
             {taxRows.length === 0 ? (
@@ -679,6 +724,60 @@ export default function AnaliticoPage() {
               </>
             )}
           </div>
+        )}
+
+        {/* ── CONTAS A RECEBER ── */}
+        {tabAtivaEfetiva === 'contas_receber' && (
+          <PlaceholderTab
+            titulo="Analítico Contas a Receber"
+            descricao="Painel com evolução dos recebimentos, aging e inadimplência por posto."
+            icon={ReceiptText}
+          />
+        )}
+
+        {/* ── FISCAL ── */}
+        {tabAtivaEfetiva === 'fiscal' && (
+          <PlaceholderTab
+            titulo="Analítico Fiscal"
+            descricao="Painel com NFs lançadas, boletos pagos, impostos apurados e divergências fiscais por período."
+            icon={Scale}
+          />
+        )}
+
+        {/* ── CONTAS A PAGAR ── */}
+        {tabAtivaEfetiva === 'contas_pagar' && (
+          <PlaceholderTab
+            titulo="Analítico Contas a Pagar"
+            descricao="Painel com total pago, em aberto e vencido por categoria de despesa e posto."
+            icon={Wallet}
+          />
+        )}
+
+        {/* ── MARKETING ── */}
+        {tabAtivaEfetiva === 'marketing' && (
+          <PlaceholderTab
+            titulo="Analítico Marketing"
+            descricao="Painel com patrocínios aprovados, ações realizadas, budget consumido e ROI por posto."
+            icon={Megaphone}
+          />
+        )}
+
+        {/* ── COMPRAS ── */}
+        {tabAtivaEfetiva === 'compras' && (
+          <PlaceholderTab
+            titulo="Analítico Compras"
+            descricao="Painel com estoque atual, rotatividade, compras por fornecedor e sugestões de pedido."
+            icon={ShoppingCart}
+          />
+        )}
+
+        {/* ── TRANSPOMBAL ── */}
+        {tabAtivaEfetiva === 'transpombal' && (
+          <PlaceholderTab
+            titulo="Analítico Transpombal"
+            descricao="Painel com frota ativa, custos de manutenção, medição de tanques e consumo por veículo."
+            icon={Truck}
+          />
         )}
       </div>
     </div>

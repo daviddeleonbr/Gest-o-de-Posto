@@ -47,6 +47,10 @@ function decodeBytea(b: Buffer | null | undefined): string {
   return b.toString('latin1')
 }
 
+export async function queryAS<T extends Record<string, unknown> = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
+  return query<T>(sql, params)
+}
+
 async function query<T extends Record<string, unknown> = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
   const client = await getPool().connect()
   try {
@@ -87,7 +91,7 @@ export async function buscarMovtosContasReceber(
     FROM movto
     WHERE empresa = ANY($1::bigint[])
       AND conta_debitar LIKE '1.3.%'
-      AND child = -1
+      AND child = 0
       AND vencto >= $2::date`
 
   if (contaCod)  { params.push(contaCod);  sql += ` AND conta_debitar = $${params.length}` }
@@ -1006,8 +1010,11 @@ export interface NfeResumoRow extends Record<string, unknown> {
 
 export async function buscarNfeManifestos(
   empresaGrids: number[],
-  dataIni: string,
 ): Promise<NfeResumoRow[]> {
+  // Retorna apenas NFs com "Ciência da Operação" — ou seja:
+  // • Existe registro em nfe_manifestacao (NF recebida)
+  // • NÃO tem evento final: 210200 (Confirmação), 210220 (Desconhecimento), 210240 (Não Realizada)
+  // Isso espelha exatamente a tela "Manifestação de Destinatário" do AUTOSYSTEM
   return query<NfeResumoRow>(
     `SELECT nr.grid::bigint, nr.empresa::bigint, nr.nfe::bigint,
             nr.emitente_nome::text, nr.emitente_cpf::text,
@@ -1015,10 +1022,16 @@ export async function buscarNfeManifestos(
             nr.valor::float
      FROM nfe_resumo nr
      WHERE nr.empresa = ANY($1::bigint[])
-       AND nr.data_emissao >= $2::date
+       AND nr.data_emissao >= (NOW() - INTERVAL '90 days')::date
+       AND EXISTS (SELECT 1 FROM nfe_manifestacao nm WHERE nm.nfe = nr.nfe)
+       AND NOT EXISTS (
+         SELECT 1 FROM nfe_manifestacao nm
+         WHERE nm.nfe = nr.nfe
+           AND nm.nfe_evento IN (210200, 210220, 210240)
+       )
      ORDER BY nr.data_emissao DESC
      LIMIT 1000`,
-    [empresaGrids, dataIni],
+    [empresaGrids],
   )
 }
 

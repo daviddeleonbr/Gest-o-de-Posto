@@ -107,7 +107,7 @@ export default function ControleCaixasPage() {
   const supabase = createClient()
   const role = usuario?.role as Role | undefined
   const podeConfigurar = can(role ?? null, 'controle_caixas.configurar')
-  const isConciliador  = role === 'conciliador' || role === 'fechador'
+  const isConciliador  = role === 'operador_conciliador' || role === 'operador_caixa'
 
   const [loading,      setLoading]      = useState(true)
   const [extError,     setExtError]     = useState<string | null>(null)
@@ -124,11 +124,13 @@ export default function ControleCaixasPage() {
     setLoading(true)
     setExtError(null)
 
-    const [postosRes, caixaRes, usuariosRes, recorrentesRes] = await Promise.all([
+    const [postosRes, caixaRes, usuariosRes, postosJunctionRes, recorrentesRes] = await Promise.all([
       fetch('/api/postos-mapeamento'),
       fetch('/api/caixa-externo'),
-      // Busca todos os usuários ativos com posto vinculado (fechadores via posto_fechamento_id)
-      supabase.from('usuarios').select('id, nome, posto_fechamento_id').eq('ativo', true).not('posto_fechamento_id', 'is', null).order('nome'),
+      // Busca todos os usuários ativos com posto vinculado (fallback: posto_fechamento_id)
+      supabase.from('usuarios').select('id, nome, posto_fechamento_id').eq('ativo', true).order('nome'),
+      // Busca todos os vínculos da junction table (múltiplos postos por operador)
+      supabase.from('usuario_postos_caixa').select('usuario_id, posto_id, usuario:usuarios(id, nome, ativo)'),
       // Busca conciliadores via tarefas_recorrentes
       supabase.from('tarefas_recorrentes').select('usuario_id, posto_id, usuario:usuarios(id, nome)').eq('ativo', true).not('posto_id', 'is', null).not('usuario_id', 'is', null),
     ])
@@ -156,17 +158,25 @@ export default function ControleCaixasPage() {
       return { posto, ultimoCaixa: caixa.ultimo_caixa_fechado, diasAtras: dias, status: calcStatus(dias, false) }
     })
 
-    // Monta mapa usuário → postos (fechadores via posto_fechamento_id + conciliadores via tarefas_recorrentes)
+    // Monta mapa usuário → postos
     const uMap = new Map<string, { nome: string; postoIds: string[] }>()
 
-    // Fechadores (1 posto cada)
+    // 1. Junction table (múltiplos postos por operador_caixa) — fonte primária
+    for (const j of postosJunctionRes.data ?? []) {
+      const u = j.usuario as unknown as { id: string; nome: string; ativo: boolean } | null
+      if (!u?.ativo) continue
+      if (!uMap.has(j.usuario_id)) uMap.set(j.usuario_id, { nome: u.nome, postoIds: [] })
+      uMap.get(j.usuario_id)!.postoIds.push(j.posto_id as string)
+    }
+
+    // 2. Fallback: posto_fechamento_id para quem ainda não está na junction table
     for (const u of usuariosRes.data ?? []) {
-      if (u.posto_fechamento_id) {
+      if (u.posto_fechamento_id && !uMap.has(u.id)) {
         uMap.set(u.id, { nome: u.nome, postoIds: [u.posto_fechamento_id] })
       }
     }
 
-    // Conciliadores (múltiplos postos via tarefas_recorrentes)
+    // 3. Conciliadores via tarefas_recorrentes
     for (const r of recorrentesRes.data ?? []) {
       const uid = r.usuario_id as string
       const uNome = (r.usuario as unknown as { nome: string } | null)?.nome ?? ''

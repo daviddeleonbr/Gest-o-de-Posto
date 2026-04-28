@@ -4,7 +4,166 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   FileText, AlertCircle, Clock, CheckCircle2,
   TrendingDown, Building2, RefreshCw, Calendar,
+  Send, X, Plus, ChevronDown, ChevronRight, Loader2,
 } from 'lucide-react'
+import { useAuthContext } from '@/contexts/AuthContext'
+import { toast } from '@/hooks/use-toast'
+
+// ── Tipos ────────────────────────────────────────────────────────
+interface Solicitacao {
+  id: string; titulo: string; fornecedor: string | null; valor: number | null
+  data_vencimento: string | null; status: string; criado_em: string; setor: string
+}
+
+const STATUS_COLOR_SOL: Record<string, string> = {
+  pendente:   'bg-yellow-900/40 text-yellow-400',
+  em_analise: 'bg-blue-900/40 text-blue-400',
+  aprovado:   'bg-emerald-900/40 text-emerald-400',
+  pago:       'bg-green-900/40 text-green-400',
+  rejeitado:  'bg-red-900/40 text-red-400',
+}
+const STATUS_LABEL_SOL: Record<string, string> = {
+  pendente: 'Pendente', em_analise: 'Em Análise', aprovado: 'Aprovado', pago: 'Pago', rejeitado: 'Rejeitado',
+}
+
+function fmtBRL(v: number | null) {
+  if (v == null) return '—'
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+function fmtDate2(d: string | null) {
+  if (!d) return '—'
+  return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
+}
+
+function SolicitacoesPagamentoFiscal() {
+  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [showNova, setShowNova]         = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [form, setForm] = useState({ titulo: '', fornecedor: '', valor: '', data_vencimento: '', descricao: '' })
+
+  async function carregar() {
+    setLoading(true)
+    const r = await fetch('/api/solicitacoes-pagamento?setor=fiscal')
+    const json = await r.json()
+    setSolicitacoes(json.solicitacoes ?? [])
+    setLoading(false)
+  }
+
+  useEffect(() => { carregar() }, [])
+
+  async function enviar(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.titulo.trim()) { toast({ variant: 'destructive', title: 'Informe o título da solicitação' }); return }
+    setSaving(true)
+    const r = await fetch('/api/solicitacoes-pagamento', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, setor: 'fiscal', valor: form.valor ? Number(form.valor.replace(',', '.')) : null }),
+    })
+    if (r.ok) {
+      toast({ title: 'Solicitação enviada para Contas a Pagar!' })
+      setForm({ titulo: '', fornecedor: '', valor: '', data_vencimento: '', descricao: '' })
+      setShowNova(false)
+      carregar()
+    } else {
+      toast({ variant: 'destructive', title: 'Erro ao enviar solicitação' })
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-xl">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
+        <div className="flex items-center gap-2">
+          <Send className="w-4 h-4 text-blue-400" />
+          <span className="font-semibold text-white text-sm">Enviar para Contas a Pagar</span>
+          <span className="text-xs text-gray-500">({solicitacoes.length})</span>
+        </div>
+        <button
+          onClick={() => setShowNova(v => !v)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" /> Nova Solicitação
+        </button>
+      </div>
+
+      {/* Formulário nova solicitação */}
+      {showNova && (
+        <form onSubmit={enviar} className="p-5 border-b border-gray-800 space-y-3 bg-gray-800/40">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-gray-400 mb-1">Título / Descrição curta *</label>
+              <input value={form.titulo} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))} required
+                placeholder="Ex: Pagamento SEFAZ — NF 1234"
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Fornecedor</label>
+              <input value={form.fornecedor} onChange={e => setForm(f => ({ ...f, fornecedor: e.target.value }))}
+                placeholder="Nome do fornecedor"
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Valor (R$)</label>
+              <input value={form.valor} onChange={e => setForm(f => ({ ...f, valor: e.target.value }))}
+                placeholder="0,00" type="text"
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Vencimento</label>
+              <input value={form.data_vencimento} onChange={e => setForm(f => ({ ...f, data_vencimento: e.target.value }))}
+                type="date"
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Observações</label>
+              <input value={form.descricao} onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+                placeholder="Informações adicionais"
+                className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white focus:outline-none focus:border-blue-500" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={saving}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              {saving ? 'Enviando...' : 'Enviar Solicitação'}
+            </button>
+            <button type="button" onClick={() => setShowNova(false)}
+              className="px-4 py-2 text-gray-400 hover:text-white text-sm rounded-lg transition-colors">
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Lista de solicitações */}
+      {loading ? (
+        <div className="p-8 text-center text-gray-500 text-sm">Carregando...</div>
+      ) : solicitacoes.length === 0 ? (
+        <div className="p-8 text-center text-gray-600 text-sm">Nenhuma solicitação enviada</div>
+      ) : (
+        <div className="divide-y divide-gray-800">
+          {solicitacoes.map(s => (
+            <div key={s.id} className="px-5 py-3 flex items-center justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white font-medium truncate">{s.titulo}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {s.fornecedor ? `${s.fornecedor} · ` : ''}
+                  {fmtBRL(s.valor)}
+                  {s.data_vencimento ? ` · vence ${fmtDate2(s.data_vencimento)}` : ''}
+                </p>
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${STATUS_COLOR_SOL[s.status] ?? 'bg-gray-800 text-gray-400'}`}>
+                {STATUS_LABEL_SOL[s.status] ?? s.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface PainelData {
   pendentes_gerente: any[]
@@ -44,6 +203,10 @@ function diasAteVencer(d: string | null) {
 }
 
 export default function FiscalPainelPage() {
+  const { usuario } = useAuthContext()
+  const isGerente = usuario?.role === 'gerente'
+  const postoIdGerente = usuario?.posto_fechamento_id ?? null
+
   const [data, setData]       = useState<PainelData | null>(null)
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
@@ -52,12 +215,14 @@ export default function FiscalPainelPage() {
   const carregar = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/fiscal/painel')
+      const params = new URLSearchParams()
+      if (isGerente && postoIdGerente) params.set('posto_id', postoIdGerente)
+      const r = await fetch(`/api/fiscal/painel?${params}`)
       setData(await r.json())
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isGerente, postoIdGerente])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -279,6 +444,9 @@ export default function FiscalPainelPage() {
           )}
         </div>
       )}
+
+      {/* Enviar para Contas a Pagar — somente adm_fiscal e master */}
+      {!isGerente && <SolicitacoesPagamentoFiscal />}
     </div>
   )
 }

@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import { Header } from '@/components/layout/Header'
 import { useAuthContext } from '@/contexts/AuthContext'
-import { can } from '@/lib/utils/permissions'
 import { toast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils/cn'
 import { Loader2, Search, Check, Tag, ArrowDownToLine } from 'lucide-react'
@@ -40,7 +39,7 @@ const MOTIVOS_CAIXA = [
 export default function CRConfiguracaoPage() {
   const { usuario } = useAuthContext()
   const role = usuario?.role as Role | undefined
-  const podeConfigurar = can(role ?? null, 'contas_receber.view') && (role === 'master' || role === 'admin')
+  const podeConfigurar = role === 'master' || role === 'adm_financeiro'
 
   const [loading,       setLoading]       = useState(true)
   const [contas,        setContas]        = useState<ContaRow[]>([])

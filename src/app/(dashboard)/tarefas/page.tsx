@@ -118,8 +118,8 @@ export default function TarefasPage() {
   const { usuario } = useAuthContext()
   const supabase = createClient()
   const role = usuario?.role as Role | undefined
-  const isOperador     = role === 'operador'
-  const isConciliador  = role === 'conciliador'
+  const isOperador     = role === 'operador_caixa'
+  const isConciliador  = role === 'operador_conciliador'
   const isRestrito     = isOperador || isConciliador   // comportamento de dashboard
   const isMaster       = role === 'master'
   const canDelete      = can(role ?? null, 'tarefas.delete')
@@ -573,7 +573,7 @@ export default function TarefasPage() {
         }
         actions={
           <div className="flex gap-2">
-            {(isMaster || role === 'admin') && (
+            {isMaster && (
               <Button
                 variant="outline"
                 onClick={() => {

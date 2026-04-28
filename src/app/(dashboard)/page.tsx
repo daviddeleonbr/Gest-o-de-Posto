@@ -106,7 +106,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!usuario) return
-    if (role === 'transpombal') { router.replace('/transpombal'); return }
+    if (role === 'adm_transpombal') { router.replace('/transpombal'); return }
     if (role === 'gerente')     { router.replace('/tanques');     return }
   }, [usuario, role])
 
