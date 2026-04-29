@@ -61,6 +61,16 @@ const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Ag
 function fmtMes(yyyymm: string) { const [y,m] = yyyymm.split('-'); return `${MESES[+m-1]} ${y}` }
 function fmtData(iso: string | null) { if (!iso) return '—'; return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) }
 function anoAtual() { return new Date().getFullYear() }
+function mesAtualPeriodo() {
+  const now = new Date()
+  const ano = now.getFullYear()
+  const mesIdx = now.getMonth()
+  const mes = String(mesIdx + 1).padStart(2, '0')
+  const lastDay = new Date(ano, mesIdx + 1, 0).getDate()
+  return { ini: `${ano}-${mes}-01`, fim: `${ano}-${mes}-${String(lastDay).padStart(2, '0')}` }
+}
+
+const PERIODO_STORAGE_KEY = 'contas-receber:periodo'
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
 
@@ -167,8 +177,10 @@ export default function ContasReceberPage() {
   const [resumoLinhas,  setResumoLinhas]  = useState<ResumoLinha[]>([])
   const [loadingFormas, setLoadingFormas] = useState(false)
   const [filtroEmpresa, setFiltroEmpresa] = useState('todos')
-  const [filtroDataIni, setFiltroDataIni] = useState(`${anoAtual()}-01-01`)
-  const [filtroDataFim, setFiltroDataFim] = useState(`${anoAtual()}-12-31`)
+  // Default = mês atual; sobrescrito por localStorage no mount (vide useEffect abaixo).
+  const [filtroDataIni, setFiltroDataIni] = useState(() => mesAtualPeriodo().ini)
+  const [filtroDataFim, setFiltroDataFim] = useState(() => mesAtualPeriodo().fim)
+  const [periodoHidratado, setPeriodoHidratado] = useState(false)
   const [filtroStatus,  setFiltroStatus]  = useState<'todos' | 'receber' | 'recebido'>('todos')
   const [search,        setSearch]        = useState('')
 
@@ -184,6 +196,29 @@ export default function ContasReceberPage() {
       .not('codigo_empresa_externo', 'is', null).order('nome')
       .then(({ data }) => { if (data) setPostos(data as PostoOpt[]) })
   }, [])
+
+  // Carrega período salvo no mount (se houver). Caso contrário mantém o mês atual.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PERIODO_STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved) as { ini?: string; fim?: string }
+        if (parsed.ini && parsed.fim) {
+          setFiltroDataIni(parsed.ini)
+          setFiltroDataFim(parsed.fim)
+        }
+      }
+    } catch { /* localStorage indisponível ou conteúdo inválido — usa default */ }
+    setPeriodoHidratado(true)
+  }, [])
+
+  // Persiste o período sempre que muda (após hidratar, pra não sobrescrever com o default).
+  useEffect(() => {
+    if (!periodoHidratado) return
+    try {
+      localStorage.setItem(PERIODO_STORAGE_KEY, JSON.stringify({ ini: filtroDataIni, fim: filtroDataFim }))
+    } catch { /* ignore */ }
+  }, [periodoHidratado, filtroDataIni, filtroDataFim])
 
   const loadFormas = useCallback(async () => {
     setLoadingFormas(true)
@@ -204,7 +239,10 @@ export default function ContasReceberPage() {
     } finally { setLoadingFormas(false) }
   }, [filtroEmpresa, filtroDataIni, filtroDataFim])
 
-  useEffect(() => { loadFormas() }, [loadFormas])
+  useEffect(() => {
+    if (!periodoHidratado) return
+    loadFormas()
+  }, [loadFormas, periodoHidratado])
 
   async function loadDetalhe(conta: string, empresa: string, mes: string) {
     const key = `${conta}|${empresa}|${mes}`
@@ -280,7 +318,7 @@ export default function ContasReceberPage() {
       }
     })
     .filter(g => g.postos.length > 0)
-    .sort((a, b) => b.receberValor - a.receberValor || a.contaNome.localeCompare(b.contaNome))
+    .sort((a, b) => a.contaNome.localeCompare(b.contaNome, 'pt-BR'))
   }, [resumoLinhas, search, filtroStatus])
 
   const gruposPrincipais = useMemo<GrupoPrincipal[]>(() => {

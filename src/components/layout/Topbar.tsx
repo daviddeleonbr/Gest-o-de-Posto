@@ -12,7 +12,7 @@ import {
   TrendingUp, Wallet, Receipt, Settings, Megaphone, Gift, Database,
   ArrowLeftRight, Eye, EyeOff, X, ChevronDown,
   PackageSearch, Truck, CalendarDays, ShoppingCart, Menu,
-  Bell, Sun, Moon, CheckCheck, Scale,
+  Bell, Sun, Moon, CheckCheck, Scale, Banknote,
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { useAuthContext } from '@/contexts/AuthContext'
@@ -33,9 +33,45 @@ type NavGroup = { label: string; items: NavItem[] }
 
 const NAV_GROUPS: NavGroup[] = [
   {
+    label: 'Cadastros',
+    items: [
+      { href: '/empresas',                   label: 'Empresas',           icon: Building2,  permission: 'empresas.view' as Permission },
+      { href: '/postos',                      label: 'Postos',             icon: MapPin,     permission: 'postos.view' as Permission },
+      { href: '/usuarios',                    label: 'Usuários',           icon: Users,      permission: 'usuarios.view' as Permission },
+      { href: '/formas-pagamento-adquirente', label: 'Formas de Pgto.',   icon: Wallet,     permission: 'formas_pagamento.view' as Permission },
+      { href: '/maquininhas',                 label: 'Maquininhas',        icon: Smartphone, permission: 'maquininhas.view' as Permission },
+      { href: '/taxas',                       label: 'Taxas',              icon: Percent,    permission: 'taxas.view' as Permission },
+      { href: '/adquirentes',                 label: 'Adquirentes',        icon: CreditCard, permission: 'adquirentes.view' as Permission },
+      { href: '/contas-bancarias',            label: 'Contas Bancárias',   icon: Landmark,   permission: 'contas_bancarias.view' as Permission },
+      {
+        label: 'Máscaras', icon: Layers, permission: 'mascaras.view' as Permission, divider: true,
+        children: [
+          { href: '/mascaras/dre',         label: 'DRE',            icon: BarChart2,  permission: 'mascaras.view' as Permission },
+          { href: '/mascaras/fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingUp, permission: 'mascaras.view' as Permission },
+        ],
+      },
+      {
+        label: 'Configurações', icon: Settings, permission: null,
+        children: [
+          { href: '/perfis',                        label: 'Perfis de Acesso',         icon: ShieldCheck, permission: 'usuarios.edit' as Permission },
+          { href: '/controle-caixas/configuracoes', label: 'Config. de Caixas',        icon: Settings,    permission: 'controle_caixas.configurar' as Permission },
+          { href: '/contas-receber/configuracao',   label: 'Config. Contas a Receber', icon: ReceiptText, permission: 'contas_receber.view' as Permission },
+        ],
+      },
+    ],
+  },
+  {
     label: 'Financeiro',
     items: [
       { href: '/contas-receber', label: 'Contas a Receber', icon: ReceiptText, permission: 'contas_receber.view' as Permission },
+      {
+        label: 'Contas a Pagar', icon: Receipt, permission: 'contas_pagar.view' as Permission,
+        children: [
+          { href: '/contas-pagar/conferencia', label: 'Conferência Diária', icon: ClipboardList, permission: 'contas_pagar.lancar' as Permission },
+          { href: '/contas-pagar/fixas',       label: 'Despesas Fixas',     icon: Wallet,        permission: 'contas_pagar.fixas.view' as Permission },
+          { href: '/contas-pagar/titulos',     label: 'Títulos a Pagar',    icon: Database,      permission: 'contas_pagar.view' as Permission },
+        ],
+      },
       {
         label: 'Conciliação Bancária', icon: ScanSearch, permission: 'relatorios.conciliacao' as Permission,
         children: [
@@ -45,7 +81,8 @@ const NAV_GROUPS: NavGroup[] = [
           { href: '/tarefas/conciliacao',      label: 'Geração de Tarefas', icon: ClipboardList, permission: 'contas_bancarias.view' as Permission },
         ],
       },
-      { href: '/controle-caixas',  label: 'Controle de Caixas', icon: CheckSquare, permission: 'controle_caixas.view' as Permission },
+      { href: '/controle-caixas',     label: 'Controle de Caixas',   icon: CheckSquare, permission: 'controle_caixas.view' as Permission },
+      { href: '/controle-dinheiro',   label: 'Controle de Dinheiro', icon: Banknote,    permission: 'controle_caixas.view' as Permission },
     ],
   },
   {
@@ -54,34 +91,6 @@ const NAV_GROUPS: NavGroup[] = [
       { href: '/fiscal',         label: 'Painel Fiscal',      icon: Scale,         permission: 'fiscal.view' as Permission },
       { href: '/fiscal/tarefas', label: 'Tarefas Fiscal',     icon: ClipboardList, permission: 'fiscal.view' as Permission },
       { href: '/fiscal/geracao', label: 'Geração de Tarefas', icon: FileText,      permission: 'fiscal.geracao' as Permission },
-    ],
-  },
-  {
-    label: 'Contas a Pagar',
-    items: [
-      { href: '/contas-pagar/conferencia', label: 'Conferência Diária', icon: ClipboardList, permission: 'contas_pagar.lancar' as Permission },
-      { href: '/contas-pagar/fixas',       label: 'Despesas Fixas',     icon: Wallet,        permission: 'contas_pagar.fixas.view' as Permission },
-      { href: '/contas-pagar/titulos',     label: 'Títulos a Pagar',    icon: Database,      permission: 'contas_pagar.view' as Permission },
-    ],
-  },
-  {
-    label: 'Transpombal',
-    items: [
-      { href: '/transpombal', label: 'Transpombal — Frota', icon: Truck, permission: 'transpombal.view' as Permission },
-      { href: '/tanques',     label: 'Medição de Tanques',  icon: Fuel,  permission: 'tanques.view' as Permission },
-    ],
-  },
-  {
-    label: 'Máquinas',
-    items: [
-      {
-        label: 'Maquininhas / Bobinas', icon: Layers, permission: 'bobinas.view' as Permission,
-        children: [
-          { href: '/bobinas/solicitacoes', label: 'Troca de Maquininhas', icon: Receipt,  permission: 'bobinas.view' as Permission },
-          { href: '/bobinas/trocas',       label: 'Trocas',               icon: Archive,  permission: 'bobinas.view' as Permission },
-          { href: '/bobinas/estoque',      label: 'Estoque de Bobinas',   icon: Archive,  permission: 'bobinas.view' as Permission },
-        ],
-      },
     ],
   },
   {
@@ -103,54 +112,34 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    label: 'Cadastro',
-    items: [
-      { href: '/empresas',                   label: 'Empresas',           icon: Building2,  permission: 'empresas.view' as Permission },
-      { href: '/postos',                      label: 'Postos',             icon: MapPin,     permission: 'postos.view' as Permission },
-      { href: '/usuarios',                    label: 'Usuários',           icon: Users,      permission: 'usuarios.view' as Permission },
-      { href: '/formas-pagamento-adquirente', label: 'Formas de Pgto.',   icon: Wallet,     permission: 'formas_pagamento.view' as Permission },
-      { href: '/maquininhas',                 label: 'Maquininhas',        icon: Smartphone, permission: 'maquininhas.view' as Permission },
-      { href: '/taxas',                       label: 'Taxas',              icon: Percent,    permission: 'taxas.view' as Permission },
-      { href: '/adquirentes',                 label: 'Adquirentes',        icon: CreditCard, permission: 'adquirentes.view' as Permission },
-      { href: '/contas-bancarias',            label: 'Contas Bancárias',   icon: Landmark,   permission: 'contas_bancarias.view' as Permission },
-      {
-        label: 'Máscaras', icon: Layers, permission: 'mascaras.view' as Permission, divider: true,
-        children: [
-          { href: '/mascaras/dre',         label: 'DRE',            icon: BarChart2,  permission: 'mascaras.view' as Permission },
-          { href: '/mascaras/fluxo-caixa', label: 'Fluxo de Caixa', icon: TrendingUp, permission: 'mascaras.view' as Permission },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'Acessos',
-    items: [
-      { href: '/portais',            label: 'Portais',            icon: Globe,    permission: 'portais.view' as Permission },
-      { href: '/acessos-unificados', label: 'Acessos Unificados', icon: Link2,    permission: 'acessos.view' as Permission },
-      { href: '/acessos-postos',     label: 'Acessos dos Postos', icon: KeyRound, permission: 'acessos.view' as Permission },
-      { href: '/acessos-anydesk',    label: 'AnyDesk',            icon: Monitor,  permission: 'anydesk.view' as Permission },
-      { href: '/servidores',         label: 'Servidores',         icon: Server,   permission: 'servidores.view' as Permission },
-      { href: '/acessos-cameras',    label: 'Câmeras',            icon: Camera,   permission: 'cameras.view' as Permission },
-      { href: '/senhas-tef',         label: 'Senhas TEF',         icon: Lock,     permission: 'senhas_tef.view' as Permission },
-    ],
-  },
-  {
     label: 'Tarefas',
     items: [
       { href: '/tarefas/avulsas', label: 'Gestão de Tarefas', icon: ClipboardList, permission: 'tarefas.view' as Permission },
     ],
   },
   {
-    label: 'Config.',
+    label: 'Controle Geral',
     items: [
-      { href: '/perfis',                       label: 'Perfis de Acesso',         icon: ShieldCheck, permission: 'usuarios.edit' as Permission },
-      { href: '/controle-caixas/configuracoes', label: 'Config. de Caixas',       icon: Settings,    permission: 'controle_caixas.configurar' as Permission },
-      { href: '/contas-receber/configuracao',   label: 'Config. Contas a Receber', icon: ReceiptText, permission: 'contas_receber.view' as Permission },
-    ],
-  },
-  {
-    label: 'Relatórios',
-    items: [
+      {
+        label: 'Máquinas', icon: Layers, permission: 'bobinas.view' as Permission,
+        children: [
+          { href: '/bobinas/solicitacoes', label: 'Troca de Maquininhas', icon: Receipt, permission: 'bobinas.view' as Permission },
+          { href: '/bobinas/trocas',       label: 'Trocas',               icon: Archive, permission: 'bobinas.view' as Permission },
+          { href: '/bobinas/estoque',      label: 'Estoque de Bobinas',   icon: Archive, permission: 'bobinas.view' as Permission },
+        ],
+      },
+      {
+        label: 'Acessos', icon: KeyRound, permission: null,
+        children: [
+          { href: '/portais',            label: 'Portais',            icon: Globe,    permission: 'portais.view' as Permission },
+          { href: '/acessos-unificados', label: 'Acessos Unificados', icon: Link2,    permission: 'acessos.view' as Permission },
+          { href: '/acessos-postos',     label: 'Acessos dos Postos', icon: KeyRound, permission: 'acessos.view' as Permission },
+          { href: '/acessos-anydesk',    label: 'AnyDesk',            icon: Monitor,  permission: 'anydesk.view' as Permission },
+          { href: '/servidores',         label: 'Servidores',         icon: Server,   permission: 'servidores.view' as Permission },
+          { href: '/acessos-cameras',    label: 'Câmeras',            icon: Camera,   permission: 'cameras.view' as Permission },
+          { href: '/senhas-tef',         label: 'Senhas TEF',         icon: Lock,     permission: 'senhas_tef.view' as Permission },
+        ],
+      },
       { href: '/relatorios', label: 'Relatórios', icon: FileText, permission: 'relatorios.view' as Permission },
     ],
   },
@@ -158,6 +147,18 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Analítico',
     items: [
       { href: '/analitico', label: 'Analítico', icon: BarChart2, permission: 'analitico.view' as Permission },
+    ],
+  },
+  {
+    label: 'Coligadas',
+    items: [
+      {
+        label: 'Transpombal', icon: Truck, permission: 'transpombal.view' as Permission,
+        children: [
+          { href: '/transpombal', label: 'Transpombal — Frota', icon: Truck, permission: 'transpombal.view' as Permission },
+          { href: '/tanques',     label: 'Medição de Tanques',  icon: Fuel,  permission: 'tanques.view' as Permission },
+        ],
+      },
     ],
   },
 ]

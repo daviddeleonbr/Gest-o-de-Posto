@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buscarMovtosDetalhe, buscarMovtosMotivoDetalhe, buscarMovtosContrapartida, buscarPessoas } from '@/lib/autosystem'
+import {
+  buscarMovtosCRPorMotivos,
+  buscarMotivosUsadosEmContas,
+  buscarPessoas,
+} from '@/lib/autosystem'
 
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
@@ -35,58 +39,57 @@ export async function GET(req: NextRequest) {
   const dataIni   = `${mes}-01`
   const dataFim   = `${mes}-${String(ultimoDia).padStart(2, '0')}`
 
-  const isMotivoKey = conta.startsWith('motivo:')
-  const motivoGrid  = isMotivoKey ? parseInt(conta.replace('motivo:', '')) : null
-
-  let movtos: any[] = []
-
-  if (isMotivoKey && motivoGrid) {
-    const data = await buscarMovtosMotivoDetalhe(empresaIds, motivoGrid, dataIni, dataFim)
-    movtos = (data as any[]).map(m => ({
-      vencto:     m.data,
-      data:       m.data,
-      documento:  m.documento,
-      tipo_doc:   m.tipo_doc,
-      valor:      m.valor,
-      empresa:    String(m.empresa),
-      child:      m.child,
-      pago:       (m.child as number) > 0,
-      data_baixa: null,
-      posto_nome: postoMap[String(m.empresa)] ?? String(m.empresa),
-    }))
+  // Resolve a chave em uma lista de motivos:
+  //   • 'motivo:NNN' → [NNN]
+  //   • '1.3.X'     → todos os motivos que postam nessa conta (DISTINCT no movto)
+  let motivos: number[] = []
+  if (conta.startsWith('motivo:')) {
+    const grid = parseInt(conta.replace('motivo:', ''))
+    if (!isNaN(grid)) motivos = [grid]
   } else {
-    const data = await buscarMovtosDetalhe(empresaIds, conta, { dataIni, dataFim }) as any[]
-
-    const pessoaIds = [...new Set(data.map((m: any) => m.pessoa).filter(Boolean))] as number[]
-    const pessoaLookup: Record<number, string> = {}
-    if (pessoaIds.length) {
-      const pessoas = await buscarPessoas(pessoaIds)
-      for (const p of pessoas) pessoaLookup[p.grid] = p.nome ?? '(sem cliente)'
-    }
-
-    const childMlids = [...new Set(data.map((m: any) => m.child).filter((c: any) => c && c > 0))] as number[]
-    const baixaLookup: Record<number, string> = {}
-    if (childMlids.length) {
-      const baixas = await buscarMovtosContrapartida(childMlids) as any[]
-      for (const b of baixas) {
-        if (b.mlid && !baixaLookup[b.mlid]) baixaLookup[b.mlid] = b.data
-      }
-    }
-
-    movtos = data.map((m: any) => ({
-      vencto:      m.vencto,
-      data:        m.data,
-      documento:   m.documento,
-      tipo_doc:    m.tipo_doc,
-      valor:       m.valor,
-      empresa:     String(m.empresa),
-      child:       m.child,
-      pago:        (m.child as number) !== 0,
-      data_baixa:  (m.child && (m.child as number) > 0) ? (baixaLookup[m.child] ?? null) : null,
-      pessoa_nome: m.pessoa ? (pessoaLookup[m.pessoa] ?? '(sem cliente)') : '(sem cliente)',
-      posto_nome:  postoMap[String(m.empresa)] ?? String(m.empresa),
-    })).sort((a: any, b: any) => (a.pessoa_nome ?? '').localeCompare(b.pessoa_nome ?? '') || a.vencto?.localeCompare(b.vencto ?? '') || 0)
+    const lookup = await buscarMotivosUsadosEmContas(empresaIds, [conta])
+    motivos = lookup.map(l => l.motivo)
   }
+
+  if (!motivos.length) return NextResponse.json({ transacoes: [] })
+
+  const data = await buscarMovtosCRPorMotivos(empresaIds, motivos, { dataIni, dataFim })
+
+  const pessoaIds = [...new Set((data as any[]).map(m => m.pessoa).filter(Boolean))] as number[]
+  const pessoaLookup: Record<number, string> = {}
+  if (pessoaIds.length) {
+    const pessoas = await buscarPessoas(pessoaIds)
+    for (const p of pessoas) pessoaLookup[p.grid] = p.nome ?? '(sem cliente)'
+  }
+
+  // Para o detalhe via conta, filtra ainda pela própria conta — assim motivos que
+  // também postam em outras contas não vazam linhas alheias para o drill.
+  const filtrarPorConta = !conta.startsWith('motivo:')
+
+  const movtos = (data as any[])
+    .filter(m => filtrarPorConta ? m.conta_debitar === conta : true)
+    .map(m => {
+      const childVal = m.child as number | null
+      const pago     = childVal !== null && childVal !== 0
+      return {
+        vencto:      (m.vencto as string | null) ?? (m.data as string),
+        data:        m.data,
+        documento:   m.documento,
+        tipo_doc:    m.tipo_doc,
+        valor:       m.valor,
+        empresa:     String(m.empresa),
+        child:       m.child,
+        pago,
+        data_baixa:  null as string | null,
+        pessoa_nome: m.pessoa ? (pessoaLookup[m.pessoa] ?? '(sem cliente)') : '(sem cliente)',
+        posto_nome:  postoMap[String(m.empresa)] ?? String(m.empresa),
+      }
+    })
+    .sort((a, b) =>
+      (a.pessoa_nome ?? '').localeCompare(b.pessoa_nome ?? '')
+      || (a.data ?? '').localeCompare(b.data ?? '')
+      || 0,
+    )
 
   return NextResponse.json({ transacoes: movtos })
 }
