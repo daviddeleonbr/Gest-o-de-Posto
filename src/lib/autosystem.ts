@@ -111,15 +111,36 @@ export async function buscarMovtosFormas(
 ): Promise<Record<string, unknown>[]> {
   const { venctoIni = '2026-01-01', venctoFim } = opts
   const params: unknown[] = [empresaIds, venctoIni]
-  let sql = `
-    SELECT grid::bigint, conta_debitar::text, empresa::bigint, pessoa::bigint, data::text, vencto::text, valor::float, child::float, mlid::bigint
-    FROM movto
-    WHERE empresa = ANY($1::bigint[])
-      AND conta_debitar LIKE '1.3.%'
-      AND vencto >= $2::date`
+  let filtroFim = ''
+  if (venctoFim) { params.push(venctoFim); filtroFim = ` AND m.vencto <= $${params.length}::date` }
 
-  if (venctoFim) { params.push(venctoFim); sql += ` AND vencto <= $${params.length}::date` }
-  sql += ` LIMIT 100000`
+  // Self-join via EXISTS sobre o conjunto pré-filtrado: marca `tem_baixa = true`
+  // quando há outro movto cujo `child` aponta para o grid do original.
+  // Mais eficiente que duas queries separadas (evita transferir array de 100k grids).
+  const sql = `
+    WITH originais AS (
+      SELECT m.grid, m.conta_debitar, m.empresa, m.pessoa, m.data, m.vencto, m.valor, m.child, m.mlid
+      FROM movto m
+      WHERE m.empresa = ANY($1::bigint[])
+        AND m.conta_debitar LIKE '1.3.%'
+        AND m.vencto >= $2::date
+        ${filtroFim}
+      LIMIT 100000
+    )
+    SELECT o.grid::bigint,
+           o.conta_debitar::text,
+           o.empresa::bigint,
+           o.pessoa::bigint,
+           o.data::text,
+           o.vencto::text,
+           o.valor::float,
+           o.child::float,
+           o.mlid::bigint,
+           EXISTS (
+             SELECT 1 FROM movto b
+             WHERE b.child = o.grid AND b.child > 0
+           ) AS tem_baixa
+    FROM originais o`
   return query(sql, params)
 }
 
@@ -132,6 +153,25 @@ export async function buscarGridsBaixados(grids: number[]): Promise<number[]> {
     [grids],
   )
   return rows.map(r => Number(r.grid))
+}
+
+// Para uma lista de grids ORIGINAIS, devolve a primeira data de baixa de cada um.
+// (Quando um título tem múltiplas baixas parciais, usa a mais antiga.)
+export interface BaixaInfo extends Record<string, unknown> {
+  grid_original: number   // o grid do título de origem
+  data_baixa:    string   // YYYY-MM-DD
+}
+
+export async function buscarBaixasPorGrids(grids: number[]): Promise<BaixaInfo[]> {
+  if (!grids.length) return []
+  return query<BaixaInfo>(
+    `SELECT child::bigint                    AS grid_original,
+            MIN(to_char(data, 'YYYY-MM-DD')) AS data_baixa
+     FROM movto
+     WHERE child = ANY($1::bigint[]) AND child > 0
+     GROUP BY child`,
+    [grids],
+  )
 }
 
 export async function buscarMovtosMotivoFormas(
@@ -153,6 +193,58 @@ export async function buscarMovtosMotivoFormas(
   return query(sql, params)
 }
 
+// Busca movtos por motivos no período — usado pelo painel de Contas a Receber → Formas.
+// `soChild0 = true` filtra apenas títulos ainda em aberto (originais não baixados).
+// Filtro de período usa `data` (data de emissão) — não `vencto`.
+export async function buscarMovtosCRPorMotivos(
+  empresaIds: number[],
+  motivoGrids: number[],
+  opts: { dataIni: string; dataFim?: string | null; soChild0?: boolean },
+): Promise<Record<string, unknown>[]> {
+  if (!motivoGrids.length || !empresaIds.length) return []
+  const params: unknown[] = [empresaIds, motivoGrids, opts.dataIni]
+  let sql = `
+    SELECT grid::bigint,
+           motivo::bigint,
+           empresa::bigint,
+           pessoa::bigint,
+           data::text,
+           vencto::text,
+           documento::text,
+           tipo_doc::text,
+           valor::float,
+           child::float,
+           mlid::bigint,
+           conta_debitar::text
+    FROM movto
+    WHERE empresa = ANY($1::bigint[])
+      AND motivo = ANY($2::bigint[])
+      AND data >= $3::date`
+  if (opts.dataFim)  { params.push(opts.dataFim); sql += ` AND data <= $${params.length}::date` }
+  if (opts.soChild0) { sql += ` AND child = 0` }
+  sql += ` ORDER BY data ASC`
+  return query(sql, params)
+}
+
+// Para uma lista de contas configuradas (cr_contas_grupo conta-based), descobre os
+// motivos de movimentação que originam lançamentos nessas contas. Retorna pares
+// motivo → conta_debitar para preservar o mapeamento original conta → grupo.
+export async function buscarMotivosUsadosEmContas(
+  empresaIds: number[],
+  contas: string[],
+): Promise<{ motivo: number; conta_debitar: string }[]> {
+  if (!contas.length || !empresaIds.length) return []
+  return query(
+    `SELECT DISTINCT motivo::bigint AS motivo, conta_debitar::text
+     FROM movto
+     WHERE empresa = ANY($1::bigint[])
+       AND conta_debitar = ANY($2::text[])
+       AND motivo IS NOT NULL
+       AND motivo > 0`,
+    [empresaIds, contas],
+  )
+}
+
 export async function buscarMovtosDetalhe(
   empresaIds: number[],
   contaCod: string,
@@ -160,18 +252,38 @@ export async function buscarMovtosDetalhe(
 ): Promise<Record<string, unknown>[]> {
   const { dataIni = '2026-01-01', dataFim, pessoa } = opts
   const params: unknown[] = [empresaIds, contaCod, dataIni]
-  let sql = `
-    SELECT grid::bigint, mlid::bigint, data::text, vencto::text, documento::text,
-           tipo_doc::text, valor::float, empresa::bigint, conta_debitar::text,
-           pessoa::bigint, child::float, obs::text
-    FROM movto
-    WHERE empresa = ANY($1::bigint[])
-      AND conta_debitar = $2
-      AND data >= $3::date`
+  let filtros = ''
+  if (dataFim) { params.push(dataFim);          filtros += ` AND m.data <= $${params.length}::date` }
+  if (pessoa)  { params.push(Number(pessoa));   filtros += ` AND m.pessoa = $${params.length}` }
 
-  if (dataFim) { params.push(dataFim); sql += ` AND data <= $${params.length}::date` }
-  if (pessoa)  { params.push(Number(pessoa)); sql += ` AND pessoa = $${params.length}` }
-  sql += ` ORDER BY data ASC LIMIT 2000`
+  // Inclui flag `tem_baixa` e `data_baixa` (primeira baixa) via subquery LATERAL.
+  // Útil para mostrar o status correto no painel de detalhe.
+  const sql = `
+    SELECT m.grid::bigint,
+           m.mlid::bigint,
+           m.data::text,
+           m.vencto::text,
+           m.documento::text,
+           m.tipo_doc::text,
+           m.valor::float,
+           m.empresa::bigint,
+           m.conta_debitar::text,
+           m.pessoa::bigint,
+           m.child::float,
+           m.obs::text,
+           bx.data_baixa
+    FROM movto m
+    LEFT JOIN LATERAL (
+      SELECT to_char(MIN(data), 'YYYY-MM-DD') AS data_baixa
+      FROM movto b
+      WHERE b.child = m.grid AND b.child > 0
+    ) bx ON TRUE
+    WHERE m.empresa = ANY($1::bigint[])
+      AND m.conta_debitar = $2
+      AND m.data >= $3::date
+      ${filtros}
+    ORDER BY m.data ASC
+    LIMIT 2000`
   return query(sql, params)
 }
 
@@ -493,6 +605,150 @@ export async function aggregarVendasCustosPorGrupoPorEmpresa(
      GROUP BY p.grupo, l.empresa`,
     [dataIni, dataFim, empresaIds, grupoGrids],
   )
+}
+
+// ── Controle de dinheiro / saldo por (empresa, conta) ───────
+// Soma todos os movtos por (empresa, codigo_conta) — sem filtro de data,
+// para retornar o saldo acumulado da conta. Para CAIXA / contas de natureza
+// débito, saldo = total_debitar - total_creditar.
+export interface SaldoEmpresaConta extends Record<string, unknown> {
+  empresa:        number
+  codigo:         string
+  total_debitar:  number
+  total_creditar: number
+}
+
+export async function aggregarSaldoPorEmpresaConta(
+  empresaIds:   number[],
+  contaCodigos: string[],
+  dataIni?:     string | null,
+  dataFim?:     string | null,
+): Promise<SaldoEmpresaConta[]> {
+  if (!empresaIds.length || !contaCodigos.length) return []
+  // Todos os movimentos (sem filtro de `child`). Filtro de período opcional por `data`.
+  const params: unknown[] = [empresaIds, contaCodigos]
+  let filtroData = ''
+  if (dataIni) { params.push(dataIni); filtroData += ` AND data >= $${params.length}::date` }
+  if (dataFim) { params.push(dataFim); filtroData += ` AND data <= $${params.length}::date` }
+
+  return query<SaldoEmpresaConta>(
+    `SELECT empresa::bigint                                                       AS empresa,
+            codigo::text                                                          AS codigo,
+            COALESCE(SUM(CASE WHEN dir = 'D' THEN valor END), 0)::float           AS total_debitar,
+            COALESCE(SUM(CASE WHEN dir = 'C' THEN valor END), 0)::float           AS total_creditar
+     FROM (
+       SELECT empresa, conta_debitar  AS codigo, 'D' AS dir, valor
+       FROM movto
+       WHERE empresa = ANY($1::bigint[])
+         AND conta_debitar = ANY($2::text[])
+         ${filtroData}
+       UNION ALL
+       SELECT empresa, conta_creditar AS codigo, 'C' AS dir, valor
+       FROM movto
+       WHERE empresa = ANY($1::bigint[])
+         AND conta_creditar = ANY($2::text[])
+         ${filtroData}
+     ) t
+     GROUP BY empresa, codigo`,
+    params,
+  )
+}
+
+// ── Controle de dinheiro: lançamentos individuais por (empresa, conta) ──
+//
+// Lista os movtos com `child = 0` para uma única conta de caixa em uma
+// empresa, no período. Inclui motivo, histórico, documento e pessoa.
+export interface MovtoCaixaLancamento {
+  data:       string  // YYYY-MM-DD
+  valor:      number
+  direcao:    'D' | 'C'  // D = entrada (caixa debitado); C = saída (caixa creditado)
+  motivo:     string
+  historico:  string
+  documento:  string | null
+  pessoa:     string
+}
+
+interface MovtoCaixaRaw extends Record<string, unknown> {
+  data:        string
+  valor:       number
+  direcao:     'D' | 'C'
+  motivo_b:    Buffer | null
+  historico_b: Buffer | null
+  documento:   string | null
+  pessoa_b:    Buffer | null
+}
+
+export async function listarMovtosCaixaPorPeriodo(
+  empresaId:  number,
+  codigo:     string,
+  dataIni?:   string | null,
+  dataFim?:   string | null,
+  limit = 5000,
+): Promise<MovtoCaixaLancamento[]> {
+  // Detecta a coluna de FK de pessoa em movto (varia entre instâncias do AUTOSYSTEM).
+  const cols = await colunasExistentes('movto', ['pessoa', 'cliente', 'observacao', 'obs', 'historico'])
+  const pessoaFkCol = cols.has('pessoa')    ? 'pessoa'
+                    : cols.has('cliente')   ? 'cliente'
+                    : null
+  const histCol = cols.has('observacao') ? 'observacao'
+              : cols.has('obs')         ? 'obs'
+              : cols.has('historico')   ? 'historico'
+              : null
+
+  const histExpr = histCol ? `m.${histCol}::bytea` : 'NULL::bytea'
+  const pessoaExpr = pessoaFkCol ? 'p.nome::bytea' : 'NULL::bytea'
+  const joinPessoa = pessoaFkCol ? `LEFT JOIN pessoa p ON p.grid = m.${pessoaFkCol}` : ''
+
+  const params: unknown[] = [empresaId, codigo]
+  let dataFiltroD = ''
+  let dataFiltroC = ''
+  if (dataIni) { params.push(dataIni); dataFiltroD = ` AND m.data >= $${params.length}::date`; dataFiltroC = dataFiltroD }
+  if (dataFim) { params.push(dataFim); dataFiltroD += ` AND m.data <= $${params.length}::date`; dataFiltroC += ` AND m.data <= $${params.length}::date` }
+  params.push(limit)
+  const limitParam = `$${params.length}`
+
+  const rows = await query<MovtoCaixaRaw>(
+    `SELECT to_char(m.data, 'YYYY-MM-DD') AS data,
+            m.valor::float                AS valor,
+            'D'::text                     AS direcao,
+            mv.nome::bytea                AS motivo_b,
+            ${histExpr}                   AS historico_b,
+            m.documento::text             AS documento,
+            ${pessoaExpr}                 AS pessoa_b
+     FROM movto m
+       LEFT JOIN motivo_movto mv ON mv.grid = m.motivo
+       ${joinPessoa}
+     WHERE m.empresa = $1::bigint
+       AND m.conta_debitar = $2::text
+       ${dataFiltroD}
+     UNION ALL
+     SELECT to_char(m.data, 'YYYY-MM-DD') AS data,
+            m.valor::float                AS valor,
+            'C'::text                     AS direcao,
+            mv.nome::bytea                AS motivo_b,
+            ${histExpr}                   AS historico_b,
+            m.documento::text             AS documento,
+            ${pessoaExpr}                 AS pessoa_b
+     FROM movto m
+       LEFT JOIN motivo_movto mv ON mv.grid = m.motivo
+       ${joinPessoa}
+     WHERE m.empresa = $1::bigint
+       AND m.conta_creditar = $2::text
+       ${dataFiltroC}
+     ORDER BY data ASC
+     LIMIT ${limitParam}`,
+    params,
+  )
+
+  return rows.map(r => ({
+    data:      r.data,
+    valor:     Number(r.valor),
+    direcao:   r.direcao,
+    motivo:    decodeBytea(r.motivo_b).trim(),
+    historico: decodeBytea(r.historico_b).trim(),
+    documento: r.documento,
+    pessoa:    decodeBytea(r.pessoa_b).trim(),
+  }))
 }
 
 // ── Balanço Financeiro ───────────────────────────────────────
@@ -966,17 +1222,20 @@ export async function buscarMovtosMotivoDetalhe(
   motivoGrid: number,
   dataIni: string,
   dataFim: string,
+  opts: { soChild0?: boolean } = {},
 ): Promise<Record<string, unknown>[]> {
-  return query(
-    `SELECT data::text, documento::text, tipo_doc::text, valor::float,
-            empresa::bigint, child::float, motivo::bigint
-     FROM movto
-     WHERE empresa = ANY($1::bigint[])
-       AND motivo = $2
-       AND data >= $3::date AND data <= $4::date
-     ORDER BY data ASC LIMIT 5000`,
-    [empresaIds, motivoGrid, dataIni, dataFim],
-  )
+  let sql = `SELECT grid::bigint, mlid::bigint,
+                    data::text, vencto::text, documento::text, tipo_doc::text, valor::float,
+                    empresa::bigint, pessoa::bigint, child::float, motivo::bigint,
+                    conta_debitar::text
+             FROM movto
+             WHERE empresa = ANY($1::bigint[])
+               AND motivo = $2
+               AND data >= $3::date
+               AND data <= $4::date`
+  if (opts.soChild0) sql += ` AND child = 0`
+  sql += ` ORDER BY data ASC LIMIT 5000`
+  return query(sql, [empresaIds, motivoGrid, dataIni, dataFim])
 }
 
 // ── contas a receber — contas distintas ──────────────────────────────────────
