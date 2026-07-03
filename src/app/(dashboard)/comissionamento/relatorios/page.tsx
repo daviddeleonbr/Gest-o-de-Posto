@@ -591,8 +591,19 @@ function RelatorioLinhaVendedor({ v, comissao, aberto, onToggle, postoId, esquem
                               : fmtPct(r.atingimento_meta)}
                           </td>
                           <td className="px-3 py-1.5 text-right tabular-nums text-gray-800">
-                            {fmtAgregado(r.base_valor, r.base_campo)}
-                            <p className="text-[10px] text-gray-400">{CAMPO_LABEL[r.base_campo]}</p>
+                            {r.breakdown?.modo === 'fixo' ? (
+                              <span
+                                className="inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-[10.5px] font-semibold text-emerald-700 whitespace-nowrap"
+                                title="Comissão em valor fixo — base ignorada"
+                              >
+                                Valor fixo
+                              </span>
+                            ) : (
+                              <>
+                                {fmtAgregado(r.base_valor, r.base_campo)}
+                                <p className="text-[10px] text-gray-400">{CAMPO_LABEL[r.base_campo]}</p>
+                              </>
+                            )}
                           </td>
                           <td className="px-3 py-1.5 text-right tabular-nums font-bold text-orange-700">
                             {fmtBRL(r.comissao)}

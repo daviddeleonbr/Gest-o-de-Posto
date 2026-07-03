@@ -389,8 +389,16 @@ function BlocoVendedor({ v, comissao, indice }: BlocoVendedorProps) {
                       {r.atingimento_meta == null ? '—' : fmtPct(r.atingimento_meta)}
                     </td>
                     <td className="py-0.5 px-1 text-right tabular-nums text-gray-700">
-                      {fmtAgregado(r.base_valor, r.base_campo)}
-                      <span className="block text-[9px] text-gray-400">{CAMPO_LABEL[r.base_campo]}</span>
+                      {r.breakdown?.modo === 'fixo' ? (
+                        <span className="inline-block px-1 border border-gray-500 text-[9px] font-semibold text-gray-800 rounded-sm">
+                          Valor fixo
+                        </span>
+                      ) : (
+                        <>
+                          {fmtAgregado(r.base_valor, r.base_campo)}
+                          <span className="block text-[9px] text-gray-400">{CAMPO_LABEL[r.base_campo]}</span>
+                        </>
+                      )}
                     </td>
                     <td className="py-0.5 px-1 text-right tabular-nums font-semibold text-orange-700">
                       {fmtBRL(r.comissao)}
