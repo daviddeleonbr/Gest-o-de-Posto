@@ -9,7 +9,7 @@ import {
   PackageSearch, Truck, CalendarDays, ShoppingCart,
   Banknote, Hash, AlertTriangle, Croissant, Wheat, Factory,
   Scale, GraduationCap, DollarSign,
-  BookOpen, FileBarChart, Download, Activity,
+  BookOpen, FileBarChart, Download, Activity, ArrowRightLeft, Sparkles,
 } from 'lucide-react'
 import type { Role } from '@/types/database.types'
 import type { Permission } from '@/lib/utils/permissions'
@@ -81,6 +81,9 @@ export const NAV_GROUPS: NavGroup[] = [
           { href: '/tarefas/conciliacao',          label: 'Geração de Tarefas',   icon: ClipboardList, permission: 'contas_bancarias.view' as Permission },
           { href: '/conciliadores',                label: 'Conciliadores',        icon: Users,         permission: 'usuarios.edit' as Permission },
           { href: '/monitoramento/saldos',          label: 'Saldos Bancários',     icon: Landmark,      permission: 'monitoramento.view' as Permission },
+          { href: '/monitoramento/diagnostico',     label: 'Diagnóstico de Divergências', icon: Activity, permission: 'monitoramento.view' as Permission },
+          { href: '/conciliadores/confirmacao',     label: 'Confirmação da Conciliação', icon: ArrowRightLeft, permission: 'monitoramento.view' as Permission },
+          { href: '/conciliadores/conciliacao-ia',  label: 'Conciliação com IA',   icon: Sparkles,      permission: 'relatorios.conciliacao' as Permission },
         ],
       },
       { href: '/controle-caixas',     label: 'Controle de Caixas',   icon: CheckSquare, permission: 'controle_caixas.view' as Permission },
@@ -120,24 +123,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/sugestao-pedido',     label: 'Sugestão de Pedido', icon: ShoppingCart,  permission: 'estoque.view' as Permission },
       { href: '/fornecedores',        label: 'Fornecedores',       icon: Truck,         permission: 'estoque.view' as Permission },
       { href: '/rotina-fornecedores', label: 'Rotina de Visitas',  icon: CalendarDays,  permission: 'estoque.view' as Permission },
-    ],
-  },
-  {
-    label: 'Pombal Massas',
-    onlyForRoles: ['master'],
-    items: [
-      { href: '/pombal-massas',           label: 'Painel',          icon: LayoutDashboard, permission: null, hideForRoles: ['gerente'] },
-      { href: '/pombal-massas/salgados',  label: 'Salgados',        icon: Croissant,       permission: null, hideForRoles: ['gerente'] },
-      { href: '/pombal-massas/insumos',   label: 'Matérias-primas', icon: Wheat,           permission: null, hideForRoles: ['gerente'] },
-      { href: '/pombal-massas/producao',  label: 'Produção',        icon: Factory,         permission: null, hideForRoles: ['gerente'] },
-      { href: '/pombal-massas/pedidos',   label: 'Pedidos',         icon: ClipboardList,   permission: null },
-      { href: '/pombal-massas/relatorios', label: 'Relatórios',     icon: FileText,        permission: null, hideForRoles: ['gerente'] },
-    ],
-  },
-  {
-    label: 'Tarefas',
-    items: [
-      { href: '/tarefas/avulsas', label: 'Gestão de Tarefas', icon: ClipboardList, permission: 'tarefas.view' as Permission },
     ],
   },
   {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Loader2, AlertCircle, Printer, ArrowLeft, Building2, Users, TrendingUp, DollarSign } from 'lucide-react'
 
@@ -44,6 +44,15 @@ const fmtData = (s: string) => {
 }
 
 export default function AprovacaoRelatorioPage() {
+  // useSearchParams exige Suspense para não quebrar o prerender do build.
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400 gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Carregando...</div>}>
+      <AprovacaoRelatorioConteudo />
+    </Suspense>
+  )
+}
+
+function AprovacaoRelatorioConteudo() {
   const sp = useSearchParams()
   const router = useRouter()
   const esquemaId = sp.get('esquema_id') ?? ''

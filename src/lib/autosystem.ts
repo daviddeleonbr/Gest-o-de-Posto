@@ -2636,6 +2636,23 @@ export async function buscarDadosCaixaFrentista(
       } catch (e: any) { console.log(`[caixa-frentista] fallback fuzzy erro: ${e.message}`) }
     }
 
+    // Fallback: liga funcionario → pessoa (mesmo nome) → usuario, escolhendo o
+    // login que TEM movto nesta empresa+data. Bridgeia divergências nome×login que
+    // o palpite por nome não pega (ex.: nome "OTAVIO DO CANTO BASIL" × login real
+    // "OTAVIOBRASIL", com um R a mais).
+    if (!usuarioAS && funcNome) {
+      try {
+        const rows = await query<{ login: string }>(
+          `SELECT u.nome::text AS login FROM usuario u JOIN pessoa p ON p.grid = u.pessoa
+            WHERE upper(btrim(p.nome::text)) = upper(btrim($1))
+              AND EXISTS (SELECT 1 FROM movto m WHERE m.empresa = $2 AND m.data = $3::date AND m.usuario = u.nome)
+            LIMIT 1`,
+          [funcNome, empresaGrid, data],
+        )
+        if (rows.length) { usuarioAS = String(rows[0].login ?? '').trim(); console.log(`[caixa-frentista] login por pessoa+movto: "${usuarioAS}"`) }
+      } catch (e: any) { console.log(`[caixa-frentista] pessoa->usuario erro: ${e.message}`) }
+    }
+
     // Fallback: testa na tabela usuario (quando existe) para dias sem caixa aberto
     if (!usuarioAS) {
       for (const cand of candidatos) {
@@ -2780,8 +2797,12 @@ export async function buscarDadosCaixaFrentista(
       console.log(`[caixa-frentista] tef_transacao → ${tefRows.length} linha(s)`)
       for (const r of tefRows) {
         const op = decodeBytea(r.op_b).trim(); const bnd = decodeBytea(r.bnd_b).trim()
-        if (!op) continue
-        const chave = bnd ? `${op} - ${bnd}` : op
+        // Em alguns postos (ex.: Alterosa) o tef_transacao vem SEM operadora_nome,
+        // só com a bandeira. O `if (!op) continue` antigo descartava TODAS essas TEF
+        // e o caixa do frentista puxava quase nada. Usa a bandeira como chave nesse
+        // caso — o mapeamento por keyword classifica (Mastercard/Visa→Cartões, Pix→PIX).
+        if (!op && !bnd) continue
+        const chave = op && bnd ? `${op} - ${bnd}` : (op || bnd)
         const jaExiste = Object.keys(movto_por_forma).some(k => {
           const kl = k.toLowerCase(); const cl = chave.toLowerCase()
           return kl === cl || kl.startsWith(cl + ' ') || kl.startsWith(cl + '-')
@@ -2874,8 +2895,8 @@ export async function buscarDadosCaixaFrentista(
         for (const r of tefRows) {
           if (gap <= 0.02) break
           const op = decodeBytea(r.op_b).trim(); const bnd = decodeBytea(r.bnd_b).trim()
-          if (!op) continue
-          const chave = bnd ? `${op} - ${bnd}` : op
+          if (!op && !bnd) continue  // sem operadora E sem bandeira: não classificável
+          const chave = op && bnd ? `${op} - ${bnd}` : (op || bnd)
           const add = Math.min(Number(r.total), gap)
           movto_por_forma[`TEF ${chave}`] = (movto_por_forma[`TEF ${chave}`] ?? 0) + add
           gap = parseFloat((gap - add).toFixed(2))

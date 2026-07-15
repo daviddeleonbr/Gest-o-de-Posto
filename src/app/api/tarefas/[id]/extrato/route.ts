@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buscarMovtosAutosystem, calcularMovimento, buscarMovimentoContaGrupo } from '@/lib/autosystem'
+import { buscarMovtosAutosystem, calcularMovimento, buscarMovimentoContaGrupo, queryAS } from '@/lib/autosystem'
 import { datasConciliacao, intervaloDatas } from '@/lib/feriados'
 import * as XLSX from 'xlsx'
 
@@ -83,7 +83,7 @@ export async function POST(
   const { data: tarefa } = await supabase
     .from('tarefas')
     .select(`
-      id, status, categoria, posto_id, tarefa_recorrente_id,
+      id, status, categoria, posto_id, tarefa_recorrente_id, banco,
       data_conclusao_prevista,
       posto:postos(id, nome, codigo_empresa_externo),
       recorrente:tarefas_recorrentes(posto_id, conta_bancaria_id, posto:postos(id, nome, codigo_empresa_externo))
@@ -133,6 +133,9 @@ export async function POST(
   let movimentoExtrato = 0
   let datasAS: string[] = []
   let extratoEhStone = false
+  let stoneNetPeriodo: number | null = null  // Stone OFX: net (Σ TRNAMT) de todo o período do extrato
+  let ofxAcctId = ''   // número da conta lido de dentro do OFX (<ACCTID>)
+  let ofxOrgNome = ''  // instituição lida do OFX (<ORG>) — p/ mensagens
 
   if (isOFX) {
     // ── Parser OFX (Stone) ─────────────────────────────────────────────────
@@ -141,6 +144,18 @@ export async function POST(
     if (!txns.length) {
       return NextResponse.json({ error: 'Arquivo OFX sem transações (STMTTRN). Verifique se é o extrato correto.' }, { status: 422 })
     }
+    // Detecta o BANCO pelo cabeçalho do OFX. NÃO é só a Stone que exporta .ofx — o
+    // Sicoob também (arquivo "Comprovante de Extrato.ofx"). Antes o código assumia
+    // Stone para TODO OFX, então um OFX do Sicoob era lido com a lógica da Stone
+    // (filtro "disponível", só entradas) e dava tudo errado / era rejeitado.
+    // Stone: FID/BANKID = 197 (0197); Sicoob: 756.
+    const ofxOrg    = (texto.match(/<ORG>\s*([^<\r\n]+)/i)    || [])[1]?.trim() || ''
+    const ofxBankId = (texto.match(/<BANKID>\s*([^<\r\n]+)/i) || [])[1]?.trim() || ''
+    const ofxFid    = (texto.match(/<FID>\s*([^<\r\n]+)/i)    || [])[1]?.trim() || ''
+    const ehStoneOFX = /stone/i.test(ofxOrg) || /^0*197$/.test(ofxBankId) || /^0*197$/.test(ofxFid)
+    ofxOrgNome = ofxOrg
+    ofxAcctId  = (texto.match(/<ACCTID>\s*([^<\r\n]+)/i) || [])[1]?.trim() || ''
+
     const datasNoArquivo = [...new Set(txns.map(t => t.data))]
 
     let targetDate: string
@@ -172,15 +187,27 @@ export async function POST(
     //    (depois sai via "Transferência automática" para a conta principal).
     // Então o movimento a comparar com as ENTRADAS do AUTOSYSTEM = soma dos
     // "Recebimento Disponível". (Equivale à coluna "Recebível de Cartão" do CSV.)
-    const ehDisponivel = (t: OfxTxn) => t.tipo === 'CREDIT' && /dispon/i.test(t.memo)
-    const disponiveis  = txnsForDate.filter(ehDisponivel)
-    movimentoExtrato = parseFloat(disponiveis.reduce((s, t) => s + t.valor, 0).toFixed(2))
-    extratoEhStone = true
+    if (ehStoneOFX) {
+      extratoEhStone = true
+      const ehDisponivel = (t: OfxTxn) => t.tipo === 'CREDIT' && /dispon/i.test(t.memo)
+      const disponiveis  = txnsForDate.filter(ehDisponivel)
+      movimentoExtrato = parseFloat(disponiveis.reduce((s, t) => s + t.valor, 0).toFixed(2))
 
-    // Saldo: usa o LEDGERBAL do arquivo; saldo anterior = saldo − movimento líquido do dia
-    const movLiquidoDia = txnsTarget.reduce((s, t) => s + t.valor, 0)
-    saldoDia      = parseFloat((saldoFinal != null ? saldoFinal : movLiquidoDia).toFixed(2))
-    saldoAnterior = parseFloat((saldoDia - movLiquidoDia).toFixed(2))
+      // Saldo: usa o LEDGERBAL do arquivo; saldo anterior = saldo − movimento líquido do dia.
+      // (O OFX da Stone às vezes traz LEDGERBAL=0 — o saldo real é recomposto depois,
+      //  ancorado no AUTOSYSTEM, usando o net de TODO o período do extrato.)
+      const movLiquidoDia = txnsTarget.reduce((s, t) => s + t.valor, 0)
+      stoneNetPeriodo = parseFloat(txnsForDate.reduce((s, t) => s + t.valor, 0).toFixed(2))  // net de todo o período agregado
+      saldoDia      = parseFloat((saldoFinal != null ? saldoFinal : movLiquidoDia).toFixed(2))
+      saldoAnterior = parseFloat((saldoDia - movLiquidoDia).toFixed(2))
+    } else {
+      // OFX de banco normal (Sicoob etc.): movimento = net de TODAS as transações do
+      // período; saldo do dia = LEDGERBAL real; saldo anterior = saldo − movimento.
+      extratoEhStone = false
+      movimentoExtrato = parseFloat(txnsForDate.reduce((s, t) => s + t.valor, 0).toFixed(2))
+      saldoDia      = parseFloat((saldoFinal != null ? saldoFinal : 0).toFixed(2))
+      saldoAnterior = saldoFinal != null ? parseFloat((saldoDia - movimentoExtrato).toFixed(2)) : 0
+    }
     extratoData   = targetDate
     datasAS       = datasAgregadas
 
@@ -340,41 +367,81 @@ export async function POST(
   const admin = createAdminClient()
   let contaCodigo: string | null = null
   let contaBanco:  string | null = null
+  let contaNumero: string | null = null
   if (contaBancariaId) {
     // Conta bancária específica da tarefa (multi-banco)
     const { data: cb } = await admin
       .from('contas_bancarias')
-      .select('codigo_conta_externo, banco')
+      .select('codigo_conta_externo, banco, conta')
       .eq('id', contaBancariaId)
       .single()
     contaCodigo = (cb as any)?.codigo_conta_externo ?? null
     contaBanco  = (cb as any)?.banco ?? null
+    contaNumero = (cb as any)?.conta ?? null
   } else if (postoId) {
-    // Legado: pega o primeiro banco do posto
+    // Recorrente sem conta_bancaria_id (ex.: recorrente Stone órfã do Sudeste, sem
+    // conta): NÃO pega a 1ª conta do posto às cegas (pegava a do Sicoob e rejeitava
+    // o extrato Stone). Casa pelo BANCO do rótulo da tarefa (tarefa.banco = "Stone").
     const { data: contas } = await admin
       .from('contas_bancarias')
-      .select('codigo_conta_externo, banco')
+      .select('codigo_conta_externo, banco, conta')
       .eq('posto_id', postoId)
       .not('codigo_conta_externo', 'is', null)
-      .limit(1)
-    contaCodigo = (contas?.[0] as any)?.codigo_conta_externo ?? null
-    contaBanco  = (contas?.[0] as any)?.banco ?? null
+    const lista = contas ?? []
+    const norm = (s: string | null) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    const labelBanco = (tarefa as any).banco as string | null
+    const alvo = (labelBanco
+      ? lista.find((c: any) => {
+          const a = norm(c.banco), b = norm(labelBanco)
+          return a && b && (a.includes(b) || b.includes(a))
+        })
+      : null) ?? lista[0]
+    contaCodigo = (alvo as any)?.codigo_conta_externo ?? null
+    contaBanco  = (alvo as any)?.banco ?? null
+    contaNumero = (alvo as any)?.conta ?? null
   }
 
-  // ── Valida que o BANCO do extrato bate com o BANCO da tarefa ──────────────
-  // Impede, por exemplo, comparar um extrato Stone contra a conta Sicoob da
-  // tarefa (foi o que aconteceu: extrato Stone anexado numa tarefa do Sicoob).
+  // ── Valida que a CONTA do extrato bate com a CONTA da tarefa ──────────────
+  // Stone e Sicoob exportam arquivos com o MESMO nome ("Comprovante de Extrato.ofx"),
+  // então adivinhar o banco pelo cabeçalho não basta. A fonte de verdade é o número
+  // da conta DENTRO do OFX (<ACCTID>): se bate com a conta da tarefa, é o arquivo
+  // certo; se não bate, é um extrato de outra conta anexado no lugar errado.
   if (contaBanco) {
     const contaEhStone = /stone/i.test(contaBanco)
-    if (extratoEhStone && !contaEhStone) {
+    const soDig    = (s: string | null) => (s || '').replace(/\D/g, '')
+    const acctDig  = soDig(ofxAcctId)
+    const contaDig = soDig(contaNumero)
+    const semDV    = (s: string) => s.replace(/\d$/, '')   // remove dígito verificador
+    const acctBate = !!acctDig && !!contaDig && (
+      acctDig === contaDig ||
+      semDV(acctDig) === semDV(contaDig) ||
+      acctDig === semDV(contaDig) ||
+      semDV(acctDig) === contaDig
+    )
+    const temNumeros = isOFX && !!acctDig && !!contaDig
+
+    if (temNumeros && !acctBate) {
+      // OFX de OUTRA conta anexado nesta tarefa (ex.: baixou o da Stone e anexou no Sicoob)
       return NextResponse.json({
-        error: `Este arquivo é um extrato da STONE, mas esta tarefa é de conciliação do ${contaBanco} (conta ${contaCodigo ?? '—'}). Anexe o extrato do banco correto — ou use a tarefa Stone deste posto.`,
+        error: `Este OFX é da conta ${ofxAcctId}${ofxOrgNome ? ` (${ofxOrgNome})` : ''}, mas esta tarefa é da conta ${contaNumero ?? contaCodigo ?? '—'} do ${contaBanco}. Baixe o extrato da conta certa — ou anexe este arquivo na tarefa da conta ${ofxAcctId}.`,
       }, { status: 422 })
     }
-    if (!extratoEhStone && contaEhStone) {
-      return NextResponse.json({
-        error: `Esta tarefa é de conciliação da STONE, mas o arquivo enviado não parece um extrato Stone (OFX). Anexe o extrato Stone deste posto.`,
-      }, { status: 422 })
+    if (temNumeros && acctBate) {
+      // O número da conta bate: é o arquivo certo. O banco passa a ser o da CONTA da
+      // tarefa (não a heurística de cabeçalho, que pode errar).
+      extratoEhStone = contaEhStone
+    } else {
+      // Sem número de conta pra comparar (Excel, ou OFX sem ACCTID): usa a heurística.
+      if (extratoEhStone && !contaEhStone) {
+        return NextResponse.json({
+          error: `Este arquivo é um extrato da STONE, mas esta tarefa é de conciliação do ${contaBanco} (conta ${contaCodigo ?? '—'}). Anexe o extrato do banco correto — ou use a tarefa Stone deste posto.`,
+        }, { status: 422 })
+      }
+      if (!extratoEhStone && contaEhStone) {
+        return NextResponse.json({
+          error: `Esta tarefa é de conciliação da STONE, mas o arquivo enviado não parece um extrato Stone (OFX). Anexe o extrato Stone deste posto.`,
+        }, { status: 422 })
+      }
     }
   }
 
@@ -411,6 +478,31 @@ export async function POST(
 
   const diferenca     = parseFloat((movimentoExtrato - movimentoExterno).toFixed(2))
   const statusExtrato = !asAcessivel || Math.abs(diferenca) < 0.02 ? 'ok' : 'divergente'
+
+  // Stone via OFX: o LEDGERBAL vem 0,00 (não é o saldo real do banco) e o OFX não
+  // tem saldo nenhum — só o movimento (Σ TRNAMT). Não dá pra encadear extrato-com-
+  // extrato (um único OFX antigo com saldo 0 quebraria toda a cadeia). Então o saldo
+  // é ANCORADO no AUTOSYSTEM, que é a fonte de verdade do saldo:
+  //   saldo_dia = saldo_AS(no dia) + (net_do_extrato − net_do_AS no período)
+  // Assim a divergência que sobra = quanto o movimento do banco difere do que foi
+  // lançado no AUTOSYSTEM naquele período. Extrato correto E já baixado no AS → 0.
+  // Se ainda não foi baixado, a diferença aponta exatamente o que falta lançar.
+  if (extratoEhStone && isOFX && contaCodigo && empresaId && asAcessivel && stoneNetPeriodo != null) {
+    try {
+      const netASPeriodo = parseFloat(((entradasAS ?? 0) - (saidasAS ?? 0)).toFixed(2))
+      const rows = await queryAS<{ s: number }>(
+        `SELECT (COALESCE((SELECT saldo_inicial FROM conta WHERE codigo = $2), 0)
+                + COALESCE(SUM(CASE WHEN conta_debitar = $2 THEN valor
+                                    WHEN conta_creditar = $2 THEN -valor ELSE 0 END), 0))::float AS s
+           FROM movto
+          WHERE empresa = $1 AND (conta_debitar = $2 OR conta_creditar = $2) AND data <= $3`,
+        [empresaId, contaCodigo, extratoData],
+      )
+      const saldoAS_D = Number(rows[0]?.s ?? 0)
+      saldoDia      = parseFloat((saldoAS_D + (stoneNetPeriodo - netASPeriodo)).toFixed(2))
+      saldoAnterior = parseFloat((saldoDia - stoneNetPeriodo).toFixed(2))
+    } catch { /* AUTOSYSTEM indisponível — mantém o saldo do arquivo (0) */ }
+  }
 
   // ── Upload do arquivo ─────────────────────────────────────────────────────
   const nomeArquivo = `${id}/${extratoData}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`

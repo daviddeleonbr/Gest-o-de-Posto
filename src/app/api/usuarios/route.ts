@@ -122,19 +122,27 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Apenas master pode redefinir senhas' }, { status: 403 })
   }
 
-  const { userId, novaSenha } = await request.json()
-  if (!userId || !novaSenha) {
-    return NextResponse.json({ error: 'userId e novaSenha são obrigatórios' }, { status: 400 })
-  }
-  if (novaSenha.length < 6) {
-    return NextResponse.json({ error: 'A senha deve ter pelo menos 6 caracteres' }, { status: 400 })
-  }
+  const { userId, novaSenha, ativo } = await request.json()
+  if (!userId) return NextResponse.json({ error: 'userId obrigatório' }, { status: 400 })
 
   const adminSupabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
+  // Ativar / inativar (soft) — alterna o flag e bane/libera o login no Auth.
+  if (typeof ativo === 'boolean') {
+    if (userId === user.id) return NextResponse.json({ error: 'Você não pode alterar seu próprio status' }, { status: 400 })
+    const { error: updErr } = await adminSupabase.from('usuarios').update({ ativo }).eq('id', userId)
+    if (updErr) return NextResponse.json({ error: updErr.message }, { status: 400 })
+    // 'none' libera o login; duração alta mantém o acesso bloqueado.
+    await adminSupabase.auth.admin.updateUserById(userId, { ban_duration: ativo ? 'none' : '876000h' })
+    return NextResponse.json({ success: true })
+  }
+
+  if (!novaSenha || novaSenha.length < 6) {
+    return NextResponse.json({ error: 'A senha deve ter pelo menos 6 caracteres' }, { status: 400 })
+  }
   const { error } = await adminSupabase.auth.admin.updateUserById(userId, { password: novaSenha })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
@@ -153,19 +161,24 @@ export async function DELETE(request: Request) {
     .single()
 
   if (requester?.role !== 'master') {
-    return NextResponse.json({ error: 'Apenas master pode excluir usuários' }, { status: 403 })
+    return NextResponse.json({ error: 'Apenas master pode inativar usuários' }, { status: 403 })
   }
 
   const { userId } = await request.json()
   if (!userId) return NextResponse.json({ error: 'userId obrigatório' }, { status: 400 })
+  if (userId === user.id) return NextResponse.json({ error: 'Você não pode inativar a si mesmo' }, { status: 400 })
 
   const adminSupabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   )
 
-  const { error } = await adminSupabase.auth.admin.deleteUser(userId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  // POLÍTICA: nunca EXCLUIR usuário (isso apaga o vínculo e joga as tarefas para
+  // outra pessoa). Em vez disso INATIVA: marca ativo=false e bane o login no Auth.
+  // Todas as tarefas e o histórico continuam com o próprio usuário; dá pra reativar.
+  const { error: updErr } = await adminSupabase.from('usuarios').update({ ativo: false }).eq('id', userId)
+  if (updErr) return NextResponse.json({ error: updErr.message }, { status: 400 })
+  await adminSupabase.auth.admin.updateUserById(userId, { ban_duration: '876000h' })
 
   return NextResponse.json({ success: true })
 }
